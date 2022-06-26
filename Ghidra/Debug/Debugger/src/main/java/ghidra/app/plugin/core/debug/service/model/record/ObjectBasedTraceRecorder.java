@@ -392,6 +392,9 @@ public class ObjectBasedTraceRecorder implements TraceRecorder {
 
 	@Override
 	public TargetThread getTargetThread(TraceThread thread) {
+		if (thread == null) {
+			return null;
+		}
 		return objectRecorder.getTargetInterface(thread, TraceObjectThread.class,
 			TargetThread.class);
 	}
@@ -420,7 +423,10 @@ public class ObjectBasedTraceRecorder implements TraceRecorder {
 	@Override
 	public TraceThread getTraceThreadForSuccessor(TargetObject successor) {
 		TraceObject traceObject = objectRecorder.toTrace(successor);
-		return traceObject.queryCanonicalAncestorsInterface(Range.singleton(getSnap()),
+		if (traceObject == null) {
+			return null;
+		}
+		return traceObject.queryCanonicalAncestorsInterface(
 			TraceObjectThread.class).findFirst().orElse(null);
 	}
 
@@ -432,7 +438,10 @@ public class ObjectBasedTraceRecorder implements TraceRecorder {
 	@Override
 	public TraceStackFrame getTraceStackFrameForSuccessor(TargetObject successor) {
 		TraceObject traceObject = objectRecorder.toTrace(successor);
-		return traceObject.queryCanonicalAncestorsInterface(Range.singleton(getSnap()),
+		if (traceObject == null) {
+			return null;
+		}
+		return traceObject.queryCanonicalAncestorsInterface(
 			TraceObjectStackFrame.class).findFirst().orElse(null);
 	}
 
@@ -546,7 +555,7 @@ public class ObjectBasedTraceRecorder implements TraceRecorder {
 			TraceObject object = thread.getObject();
 			this.process = object
 					.queryAncestorsTargetInterface(Range.singleton(getSnap()), TargetProcess.class)
-					.map(p -> p.getFirstParent(object))
+					.map(p -> p.getSource(object))
 					.findFirst()
 					.orElse(null);
 		}
@@ -562,7 +571,7 @@ public class ObjectBasedTraceRecorder implements TraceRecorder {
 			}
 			return object
 					.queryAncestorsTargetInterface(Range.singleton(getSnap()), TargetProcess.class)
-					.map(p -> p.getFirstParent(object))
+					.map(p -> p.getSource(object))
 					.anyMatch(p -> p == process);
 		}
 	}

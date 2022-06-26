@@ -58,7 +58,8 @@
       time on."</LI>
 
       <LI>Representation - the value of the register as interpreted by its data type. If the value
-      is an address, double-clicking this field will navigate to it.</LI>
+      is an address, double-clicking this field will navigate to it. This field is user modifiable
+      whenever the Value column is modifiable and the selected data type provides an encoder.</LI>
     </UL>
 
     <H2>Actions</H2>
@@ -99,7 +100,7 @@
     and Service</A>. <B>Note:</B> Only the raw "Value" column can be edited directly. The "Repr"
     column cannot be edited, yet.</P>
 
-    <H3><A name="snapshot_window"></A>Snapshot Window</H3>
+    <H3><A name="clone_window"></A>Clone Window</H3>
 
     <P>This button is analogous to the "snapshot" action of other Ghidra windows. It generates a
     clone of this window. The clone will no longer follow the current thread, but it will follow

@@ -23,6 +23,7 @@ import org.apache.commons.collections4.bidimap.DualHashBidiMap;
 
 import com.google.common.collect.Range;
 
+import ghidra.dbg.DebuggerObjectModel;
 import ghidra.dbg.target.TargetAttacher.TargetAttachKind;
 import ghidra.dbg.target.TargetAttacher.TargetAttachKindSet;
 import ghidra.dbg.target.TargetBreakpointSpec.TargetBreakpointKind;
@@ -75,6 +76,23 @@ class ObjectRecorder {
 		return targetObject == null ? null : targetObject.obj;
 	}
 
+	/**
+	 * List the names of interfaces on the object not already covered by the schema
+	 * 
+	 * @param object the object
+	 * @return the comma-separated list of interface names
+	 */
+	protected String computeExtraInterfaces(TargetObject object) {
+		Set<String> result = new LinkedHashSet<>(object.getInterfaceNames());
+		for (Class<? extends TargetObject> iface : object.getSchema().getInterfaces()) {
+			result.remove(DebuggerObjectModel.requireIfaceName(iface));
+		}
+		if (result.isEmpty()) {
+			return null;
+		}
+		return result.stream().collect(Collectors.joining(","));
+	}
+
 	protected void recordCreated(long snap, TargetObject object) {
 		TraceObject traceObject;
 		if (object.isRoot()) {
@@ -82,12 +100,19 @@ class ObjectRecorder {
 			traceObject = objectManager.getRootObject();
 		}
 		else {
-			traceObject = objectManager
-					.createObject(TraceObjectKeyPath.of(object.getPath()), Range.atLeast(snap));
+			traceObject = objectManager.createObject(TraceObjectKeyPath.of(object.getPath()));
 		}
 		synchronized (objectMap) {
-			objectMap.put(new IDKeyed<>(object), new IDKeyed<>(traceObject));
+			IDKeyed<TraceObject> exists =
+				objectMap.put(new IDKeyed<>(object), new IDKeyed<>(traceObject));
+			if (exists != null) {
+				Msg.error(this, "Received created for an object that already exists: " + exists);
+			}
 		}
+		String extras = computeExtraInterfaces(object);
+		// Note: null extras will erase previous value, if necessary.
+		traceObject.setAttribute(Range.atLeast(snap),
+			TraceObject.EXTRA_INTERFACES_ATTRIBUTE_NAME, extras);
 	}
 
 	protected void recordInvalidated(long snap, TargetObject object) {
@@ -102,7 +127,7 @@ class ObjectRecorder {
 			Msg.error(this, "Unknown object was invalidated: " + object);
 			return;
 		}
-		traceObject.obj.truncateOrDelete(Range.atLeast(snap));
+		traceObject.obj.removeTree(Range.atLeast(snap));
 	}
 
 	protected String encodeEnum(Enum<?> e) {
@@ -269,7 +294,7 @@ class ObjectRecorder {
 		if (found == null) {
 			return null;
 		}
-		TraceObject last = found.getLastChild(null);
+		TraceObject last = found.getDestination(null);
 		if (last == null) {
 			return null;
 		}
@@ -284,7 +309,7 @@ class ObjectRecorder {
 			return List.of();
 		}
 		return seed.querySuccessorsTargetInterface(Range.singleton(recorder.getSnap()), targetIf)
-				.map(p -> toTarget(p.getLastChild(seed)).as(targetIf))
+				.map(p -> toTarget(p.getDestination(seed)).as(targetIf))
 				.collect(Collectors.toList());
 	}
 }

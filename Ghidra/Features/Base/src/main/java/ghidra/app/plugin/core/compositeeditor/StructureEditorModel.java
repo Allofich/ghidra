@@ -381,7 +381,10 @@ class StructureEditorModel extends CompEditorModel {
 		}
 		insertComponentMultiple(startIndex, dt, originalComp.getLength(), multiple, monitor);
 
-		// Adjust the selection since we added some
+		// Adjust the selection since we added some components. Select last component added.
+		// Ensure that last added component is selected to allow for repeated duplication
+		setSelection(new int[] { index + multiple });
+
 		componentEdited();
 		lastNumDuplicates = multiple;
 	}
@@ -592,6 +595,9 @@ class StructureEditorModel extends CompEditorModel {
 		// set actions based on number of items selected
 		int rowIndex = getRow();
 		DataTypeComponent comp = getComponent(rowIndex);
+		if (comp == null) {
+			return false;
+		}
 		DataType dt = comp.getDataType();
 		if (viewComposite.isPackingEnabled()) {
 			return true;
@@ -1091,7 +1097,7 @@ class StructureEditorModel extends CompEditorModel {
 	}
 
 	public void createInternalStructure(TaskMonitor monitor)
-			throws InvalidDataTypeException, DataTypeConflictException, UsrException {
+			throws InvalidDataTypeException, UsrException {
 
 		if (selection.getNumRanges() != 1) {
 			throw new UsrException("Can only create structure on a contiguous selection.");

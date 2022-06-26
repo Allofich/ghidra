@@ -54,6 +54,7 @@ import ghidra.app.util.viewer.listingpanel.ListingPanel;
 import ghidra.dbg.model.AbstractTestTargetRegisterBank;
 import ghidra.dbg.model.TestDebuggerModelBuilder;
 import ghidra.dbg.target.*;
+import ghidra.dbg.testutil.DebuggerModelTestUtils;
 import ghidra.framework.model.*;
 import ghidra.framework.plugintool.PluginTool;
 import ghidra.program.database.ProgramDB;
@@ -77,7 +78,7 @@ import ghidra.util.exception.CancelledException;
 import ghidra.util.task.ConsoleTaskMonitor;
 
 public abstract class AbstractGhidraHeadedDebuggerGUITest
-		extends AbstractGhidraHeadedIntegrationTest {
+		extends AbstractGhidraHeadedIntegrationTest implements DebuggerModelTestUtils {
 
 	public static final String LANGID_TOYBE64 = "Toy:BE:64:default";
 
@@ -531,6 +532,15 @@ public abstract class AbstractGhidraHeadedDebuggerGUITest
 	};
 	protected ConsoleTaskMonitor monitor = new ConsoleTaskMonitor();
 
+	protected void waitRecorder(TraceRecorder recorder) throws Throwable {
+		if (recorder == null) {
+			return;
+		}
+		waitOn(recorder.getTarget().getModel().flushEvents());
+		waitOn(recorder.flushTransactions());
+		waitForDomainObject(recorder.getTrace());
+	}
+
 	@Before
 	public void setUp() throws Exception {
 		ListenerMap.clearErr();
@@ -556,6 +566,7 @@ public abstract class AbstractGhidraHeadedDebuggerGUITest
 
 	@After
 	public void tearDown() {
+		waitForTasks();
 		runSwing(() -> traceManager.setSaveTracesByDefault(false));
 
 		if (tb != null) {
@@ -579,6 +590,7 @@ public abstract class AbstractGhidraHeadedDebuggerGUITest
 			program.release(this);
 		}
 
+		waitForTasks();
 		env.dispose();
 	}
 

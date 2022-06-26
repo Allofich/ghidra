@@ -31,7 +31,6 @@ import ghidra.app.plugin.core.debug.gui.AbstractGhidraHeadedDebuggerGUITest;
 import ghidra.app.plugin.core.debug.mapping.*;
 import ghidra.app.services.ActionSource;
 import ghidra.app.services.TraceRecorder;
-import ghidra.async.AsyncTestUtils;
 import ghidra.dbg.error.DebuggerMemoryAccessException;
 import ghidra.dbg.model.*;
 import ghidra.dbg.target.*;
@@ -52,8 +51,7 @@ import ghidra.trace.model.time.TraceSnapshot;
 import ghidra.trace.model.time.TraceTimeManager;
 import ghidra.util.task.TaskMonitor;
 
-public class ObjectBasedTraceRecorderTest extends AbstractGhidraHeadedDebuggerGUITest
-		implements AsyncTestUtils {
+public class ObjectBasedTraceRecorderTest extends AbstractGhidraHeadedDebuggerGUITest {
 	DebuggerMappingOpinion opinion = new ObjectBasedDebuggerMappingOpinion();
 	TraceRecorder recorder;
 
@@ -171,19 +169,22 @@ public class ObjectBasedTraceRecorderTest extends AbstractGhidraHeadedDebuggerGU
 	public void testRecordThreadNameReuse() throws Throwable {
 		startRecording();
 		mb.createTestProcessesAndThreads();
-		TraceThread thread1a = waitForValue(() -> recorder.getTraceThread(mb.testThread1));
+		waitRecorder(recorder);
+		TraceThread thread1 = recorder.getTraceThread(mb.testThread1);
+		assertNotNull(thread1);
+		TraceObject object1 = ((TraceObjectThread) thread1).getObject();
 
 		recorder.forceSnapshot();
 		mb.testProcess1.threads.removeThreads(mb.testThread1);
-
-		waitForPass(() -> assertEquals(Range.singleton(0L), thread1a.getLifespan()));
+		waitRecorder(recorder);
+		assertEquals(Range.singleton(0L), thread1.getLifespan());
 		assertNull(recorder.getTraceThread(mb.testThread1));
 
 		recorder.forceSnapshot();
 		mb.testThread1 = mb.testProcess1.addThread(1);
-		TraceThread thread1b = waitForValue(() -> recorder.getTraceThread(mb.testThread1));
-
-		assertNotSame(thread1a, thread1b);
+		waitRecorder(recorder);
+		assertSame(thread1, recorder.getTraceThread(mb.testThread1));
+		assertEquals(Set.of(Range.singleton(0L), Range.atLeast(2L)), object1.getLife().asRanges());
 	}
 
 	@Test
@@ -512,7 +513,7 @@ public class ObjectBasedTraceRecorderTest extends AbstractGhidraHeadedDebuggerGU
 		TraceObject traceBank = thread.getObject()
 				.querySuccessorsTargetInterface(Range.singleton(recorder.getSnap()),
 					TargetRegisterBank.class)
-				.map(p -> p.getLastChild(thread.getObject()))
+				.map(p -> p.getDestination(thread.getObject()))
 				.findAny()
 				.orElseThrow();
 
