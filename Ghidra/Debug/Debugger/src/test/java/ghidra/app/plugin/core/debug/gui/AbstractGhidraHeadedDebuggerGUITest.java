@@ -68,7 +68,7 @@ import ghidra.test.TestEnv;
 import ghidra.trace.database.ToyDBTraceBuilder;
 import ghidra.trace.model.*;
 import ghidra.trace.model.Trace.TraceMemoryBytesChangeType;
-import ghidra.trace.model.memory.TraceMemoryRegisterSpace;
+import ghidra.trace.model.memory.TraceMemorySpace;
 import ghidra.trace.model.thread.TraceThread;
 import ghidra.trace.util.TraceAddressSpace;
 import ghidra.util.InvalidNameException;
@@ -486,19 +486,12 @@ public abstract class AbstractGhidraHeadedDebuggerGUITest
 	}
 
 	protected static LocationTrackingSpec getLocationTrackingSpec(String name) {
-		return LocationTrackingSpec.fromConfigName(name);
+		return LocationTrackingSpecFactory.fromConfigName(name);
 	}
 
 	protected static AutoReadMemorySpec getAutoReadMemorySpec(String name) {
 		return AutoReadMemorySpec.fromConfigName(name);
 	}
-
-	protected final LocationTrackingSpec trackNone =
-		getLocationTrackingSpec(NoneLocationTrackingSpec.CONFIG_NAME);
-	protected final LocationTrackingSpec trackPc =
-		getLocationTrackingSpec(PCLocationTrackingSpec.CONFIG_NAME);
-	protected final LocationTrackingSpec trackSp =
-		getLocationTrackingSpec(SPLocationTrackingSpec.CONFIG_NAME);
 
 	protected final AutoReadMemorySpec readNone =
 		getAutoReadMemorySpec(NoneAutoReadMemorySpec.CONFIG_NAME);
@@ -567,7 +560,12 @@ public abstract class AbstractGhidraHeadedDebuggerGUITest
 	@After
 	public void tearDown() {
 		waitForTasks();
-		runSwing(() -> traceManager.setSaveTracesByDefault(false));
+		runSwing(() -> {
+			if (traceManager == null) {
+				return;
+			}
+			traceManager.setSaveTracesByDefault(false);
+		});
 
 		if (tb != null) {
 			if (traceManager != null && traceManager.getOpenTraces().contains(tb.trace)) {
@@ -600,35 +598,29 @@ public abstract class AbstractGhidraHeadedDebuggerGUITest
 		modelService.addModel(mb.testModel);
 	}
 
-	protected TraceRecorder recordAndWaitSync() throws Exception {
-		createTestModel();
+	protected void populateTestModel() throws Throwable {
 		mb.createTestProcessesAndThreads();
-		mb.createTestThreadRegisterBanks();
 		// NOTE: Test mapper uses TOYBE64
 		mb.testProcess1.regs.addRegistersFromLanguage(getToyBE64Language(),
 			Register::isBaseRegister);
+		mb.createTestThreadRegisterBanks();
 		mb.testProcess1.addRegion(".text", mb.rng(0x00400000, 0x00401000), "rx");
 		mb.testProcess1.addRegion(".data", mb.rng(0x00600000, 0x00601000), "rw");
+	}
 
-		TraceRecorder recorder = modelService.recordTarget(mb.testProcess1,
-			createTargetTraceMapper(mb.testProcess1), ActionSource.AUTOMATIC);
+	protected TargetObject chooseTarget() {
+		return mb.testProcess1;
+	}
 
-		waitFor(() -> {
-			TraceThread thread = recorder.getTraceThread(mb.testThread1);
-			if (thread == null) {
-				return false;
-			}
-			/*
-			DebuggerRegisterMapper mapper = recorder.getRegisterMapper(thread);
-			if (mapper == null) {
-				return false;
-			}
-			if (!mapper.getRegistersOnTarget().containsAll(baseRegs)) {
-				return false;
-			}
-			*/
-			return true;
-		});
+	protected TraceRecorder recordAndWaitSync() throws Throwable {
+		createTestModel();
+		populateTestModel();
+
+		TargetObject target = chooseTarget();
+		TraceRecorder recorder = modelService.recordTarget(target,
+			createTargetTraceMapper(target), ActionSource.AUTOMATIC);
+
+		waitRecorder(recorder);
 		return recorder;
 	}
 
@@ -736,7 +728,7 @@ public abstract class AbstractGhidraHeadedDebuggerGUITest
 		program = new ProgramDB("static-" + name.getMethodName(), lang,
 			lang.getDefaultCompilerSpec(), this);
 		try (UndoableTransaction tid =
-			UndoableTransaction.start(program, "Set Executable Path", true)) {
+			UndoableTransaction.start(program, "Set Executable Path")) {
 			program.setExecutablePath(path);
 		}
 		programManager.openProgram(program);
@@ -760,7 +752,7 @@ public abstract class AbstractGhidraHeadedDebuggerGUITest
 				if (space.getThread() != traceThread) {
 					return;
 				}
-				TraceMemoryRegisterSpace regSpace =
+				TraceMemorySpace regSpace =
 					trace.getMemoryManager().getMemoryRegisterSpace(traceThread, false);
 				assertNotNull(regSpace);
 				for (Map.Entry<String, byte[]> ent : values.entrySet()) {

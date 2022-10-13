@@ -48,9 +48,9 @@ import ghidra.util.database.DBOpenMode;
 import ghidra.util.exception.*;
 import ghidra.util.task.TaskMonitor;
 
-public class DBTraceMemoryManager
-		extends AbstractDBTraceSpaceBasedManager<DBTraceMemorySpace, DBTraceMemoryRegisterSpace>
-		implements TraceMemoryManager, DBTraceDelegatingManager<DBTraceMemorySpace> {
+public class DBTraceMemoryManager extends AbstractDBTraceSpaceBasedManager<DBTraceMemorySpace>
+		implements TraceMemoryManager, InternalTraceMemoryOperations,
+		DBTraceDelegatingManager<DBTraceMemorySpace> {
 
 	protected static final String NAME = "Memory";
 
@@ -67,9 +67,19 @@ public class DBTraceMemoryManager
 	}
 
 	@Override
+	public AddressSpace getSpace() {
+		return null;
+	}
+
+	@Override
 	public AddressSpace createOverlayAddressSpace(String name, AddressSpace base)
 			throws DuplicateNameException {
 		return overlayAdapter.createOverlayAddressSpace(name, base);
+	}
+
+	@Override
+	public AddressSpace getOrCreateOverlayAddressSpace(String name, AddressSpace base) {
+		return overlayAdapter.getOrCreateOverlayAddressSpace(name, base);
 	}
 
 	@Override
@@ -80,13 +90,13 @@ public class DBTraceMemoryManager
 	@Override
 	protected DBTraceMemorySpace createSpace(AddressSpace space, DBTraceSpaceEntry ent)
 			throws VersionException, IOException {
-		return new DBTraceMemorySpace(this, dbh, space, ent);
+		return new DBTraceMemorySpace(this, dbh, space, ent, null);
 	}
 
 	@Override
-	protected DBTraceMemoryRegisterSpace createRegisterSpace(AddressSpace space,
+	protected DBTraceMemorySpace createRegisterSpace(AddressSpace space,
 			TraceThread thread, DBTraceSpaceEntry ent) throws VersionException, IOException {
-		return new DBTraceMemoryRegisterSpace(this, dbh, space, ent, thread);
+		return new DBTraceMemorySpace(this, dbh, space, ent, thread);
 	}
 
 	@Override
@@ -110,19 +120,19 @@ public class DBTraceMemoryManager
 	}
 
 	@Override
-	public DBTraceMemoryRegisterSpace getMemoryRegisterSpace(TraceThread thread,
+	public DBTraceMemorySpace getMemoryRegisterSpace(TraceThread thread,
 			boolean createIfAbsent) {
 		return getForRegisterSpace(thread, 0, createIfAbsent);
 	}
 
 	@Override
-	public TraceMemoryRegisterSpace getMemoryRegisterSpace(TraceThread thread, int frame,
+	public DBTraceMemorySpace getMemoryRegisterSpace(TraceThread thread, int frame,
 			boolean createIfAbsent) {
 		return getForRegisterSpace(thread, frame, createIfAbsent);
 	}
 
 	@Override
-	public DBTraceMemoryRegisterSpace getMemoryRegisterSpace(TraceStackFrame frame,
+	public DBTraceMemorySpace getMemoryRegisterSpace(TraceStackFrame frame,
 			boolean createIfAbsent) {
 		return getForRegisterSpace(frame, createIfAbsent);
 	}
@@ -261,7 +271,8 @@ public class DBTraceMemoryManager
 
 	@Override
 	public Entry<Long, TraceMemoryState> getViewState(long snap, Address address) {
-		return delegateRead(address.getAddressSpace(), m -> m.getViewState(snap, address));
+		return delegateReadOr(address.getAddressSpace(), m -> m.getViewState(snap, address),
+			() -> Map.entry(snap, TraceMemoryState.UNKNOWN));
 	}
 
 	@Override

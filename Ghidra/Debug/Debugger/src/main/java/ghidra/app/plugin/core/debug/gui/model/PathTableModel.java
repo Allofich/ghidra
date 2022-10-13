@@ -22,11 +22,12 @@ import java.util.stream.Stream;
 import com.google.common.collect.Range;
 
 import docking.widgets.table.TableColumnDescriptor;
+import docking.widgets.table.RangeCursorTableHeaderRenderer.SeekListener;
 import ghidra.app.plugin.core.debug.gui.model.PathTableModel.PathRow;
 import ghidra.app.plugin.core.debug.gui.model.columns.*;
 import ghidra.framework.plugintool.Plugin;
 import ghidra.trace.model.Trace;
-import ghidra.trace.model.target.TraceObjectValPath;
+import ghidra.trace.model.target.*;
 
 public class PathTableModel extends AbstractQueryTableModel<PathRow> {
 	/** Initialized in {@link #createTableColumnDescriptor()}, which precedes this. */
@@ -89,6 +90,12 @@ public class PathTableModel extends AbstractQueryTableModel<PathRow> {
 		public boolean isModified() {
 			return isValueModified(path.getLastEntry());
 		}
+
+		public boolean isLastCanonical() {
+			TraceObjectValue last = path.getLastEntry();
+			// Root is canonical
+			return last == null || last.isCanonical();
+		}
 	}
 
 	public PathTableModel(Plugin plugin) {
@@ -144,6 +151,16 @@ public class PathTableModel extends AbstractQueryTableModel<PathRow> {
 	}
 
 	@Override
+	public PathRow findTraceObject(TraceObject object) {
+		for (PathRow row : getModelData()) {
+			if (row.getValue() == object && row.isLastCanonical()) {
+				return row;
+			}
+		}
+		return null;
+	}
+
+	@Override
 	public void setDiffColor(Color diffColor) {
 		valueColumn.setDiffColor(diffColor);
 	}
@@ -151,5 +168,16 @@ public class PathTableModel extends AbstractQueryTableModel<PathRow> {
 	@Override
 	public void setDiffColorSel(Color diffColorSel) {
 		valueColumn.setDiffColorSel(diffColorSel);
+	}
+
+	@Override
+	public void snapChanged() {
+		super.snapChanged();
+		lifespanPlotColumn.setSnap(getSnap());
+	}
+
+	@Override
+	public void addSeekListener(SeekListener listener) {
+		lifespanPlotColumn.addSeekListener(listener);
 	}
 }

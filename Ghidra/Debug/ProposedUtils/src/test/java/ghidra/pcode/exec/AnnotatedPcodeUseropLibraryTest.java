@@ -20,12 +20,12 @@ import static org.junit.Assert.assertTrue;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
-import java.util.List;
 
 import org.junit.Test;
 
 import ghidra.app.plugin.processors.sleigh.SleighException;
 import ghidra.app.plugin.processors.sleigh.SleighLanguage;
+import ghidra.pcode.exec.PcodeExecutorStatePiece.Reason;
 import ghidra.pcode.utils.Utils;
 import ghidra.program.model.lang.LanguageID;
 import ghidra.program.model.lang.Register;
@@ -49,19 +49,19 @@ public class AnnotatedPcodeUseropLibraryTest extends AbstractGhidraHeadlessInteg
 			(SleighLanguage) getLanguageService().getLanguage(new LanguageID(languageId));
 		PcodeExecutorState<byte[]> state = new BytesPcodeExecutorState(language);
 		PcodeArithmetic<byte[]> arithmetic = BytesPcodeArithmetic.forLanguage(language);
-		return new PcodeExecutor<>(language, arithmetic, state);
+		return new PcodeExecutor<>(language, arithmetic, state, Reason.EXECUTE);
 	}
 
 	protected <T> void executeSleigh(PcodeExecutor<T> executor, PcodeUseropLibrary<T> library,
-			String... lines) {
+			String source) {
 		PcodeProgram program = SleighProgramCompiler.compileProgram(executor.getLanguage(), "test",
-			List.of(lines), library);
+			source, library);
 		executor.execute(program, library);
 	}
 
-	protected void executeSleigh(PcodeUseropLibrary<byte[]> library, String... lines)
+	protected void executeSleigh(PcodeUseropLibrary<byte[]> library, String source)
 			throws Exception {
-		executeSleigh(createBytesExecutor(), library, lines);
+		executeSleigh(createBytesExecutor(), library, source);
 	}
 
 	protected static void assertBytes(long expectedVal, int expectedSize, byte[] actual) {
@@ -155,7 +155,7 @@ public class AnnotatedPcodeUseropLibraryTest extends AbstractGhidraHeadlessInteg
 		Register r0 = executor.getLanguage().getRegister("r0");
 
 		executeSleigh(executor, library, "r0 = __testop();");
-		assertBytes(1234, 8, executor.getState().getVar(r0));
+		assertBytes(1234, 8, executor.getState().getVar(r0, Reason.INSPECT));
 	}
 
 	@Test
@@ -175,7 +175,7 @@ public class AnnotatedPcodeUseropLibraryTest extends AbstractGhidraHeadlessInteg
 
 		executor.getState().setVar(r0, Utils.longToBytes(10, 8, true));
 		executeSleigh(executor, library, "r1 = __testop(r0, 59:8);");
-		assertBytes(159, 8, executor.getState().getVar(r1));
+		assertBytes(159, 8, executor.getState().getVar(r1, Reason.INSPECT));
 	}
 
 	@Test
@@ -197,10 +197,10 @@ public class AnnotatedPcodeUseropLibraryTest extends AbstractGhidraHeadlessInteg
 	@Test
 	public void testOpState() throws Exception {
 		var library = new TestUseropLibrary() {
-			PcodeExecutorStatePiece<byte[], byte[]> state;
+			PcodeExecutorState<byte[]> state;
 
 			@PcodeUserop
-			private void __testop(@OpState PcodeExecutorStatePiece<byte[], byte[]> state) {
+			private void __testop(@OpState PcodeExecutorState<byte[]> state) {
 				this.state = state;
 			}
 		};
@@ -247,7 +247,7 @@ public class AnnotatedPcodeUseropLibraryTest extends AbstractGhidraHeadlessInteg
 	public void testKitchenSink() throws Exception {
 		var library = new TestUseropLibrary() {
 			PcodeExecutor<byte[]> executor;
-			PcodeExecutorStatePiece<byte[], byte[]> state;
+			PcodeExecutorState<byte[]> state;
 			PcodeUseropLibrary<byte[]> lib;
 			Varnode outVar;
 			Varnode inVar0;
@@ -259,7 +259,7 @@ public class AnnotatedPcodeUseropLibraryTest extends AbstractGhidraHeadlessInteg
 					@OpLibrary PcodeUseropLibrary<byte[]> lib,
 					@OpExecutor PcodeExecutor<byte[]> executor,
 					Varnode inVar0,
-					@OpState PcodeExecutorStatePiece<byte[], byte[]> state,
+					@OpState PcodeExecutorState<byte[]> state,
 					byte[] inVal1) {
 				this.executor = executor;
 				this.state = state;
@@ -282,7 +282,7 @@ public class AnnotatedPcodeUseropLibraryTest extends AbstractGhidraHeadlessInteg
 		assertRegVarnode(r0, library.outVar);
 		assertRegVarnode(r1, library.inVar0);
 		assertBytes(1234, 8, library.inVal1);
-		assertBytes(1234, 8, executor.getState().getVar(r0));
+		assertBytes(1234, 8, executor.getState().getVar(r0, Reason.INSPECT));
 	}
 
 	@Test(expected = SleighException.class)
@@ -345,10 +345,28 @@ public class AnnotatedPcodeUseropLibraryTest extends AbstractGhidraHeadlessInteg
 	}
 
 	@Test(expected = IllegalArgumentException.class)
+	public void testErrExecutorTypeParam() throws Exception {
+		new TestUseropLibrary() {
+			@PcodeUserop
+			private void __testop(@OpExecutor PcodeExecutor<Object> executor) {
+			}
+		};
+	}
+
+	@Test(expected = IllegalArgumentException.class)
 	public void testErrStateType() throws Exception {
 		new TestUseropLibrary() {
 			@PcodeUserop
 			private void __testop(@OpState int state) {
+			}
+		};
+	}
+
+	@Test(expected = IllegalArgumentException.class)
+	public void testErrStateTypeParam() throws Exception {
+		new TestUseropLibrary() {
+			@PcodeUserop
+			private void __testop(@OpState PcodeExecutorState<Object> state) {
 			}
 		};
 	}
@@ -394,8 +412,8 @@ public class AnnotatedPcodeUseropLibraryTest extends AbstractGhidraHeadlessInteg
 	public void testErrDuplicateState() throws Exception {
 		new TestUseropLibrary() {
 			@PcodeUserop
-			private void __testop(@OpState PcodeExecutorStatePiece<byte[], byte[]> state0,
-					@OpState PcodeExecutorStatePiece<byte[], byte[]> state1) {
+			private void __testop(@OpState PcodeExecutorState<byte[]> state0,
+					@OpState PcodeExecutorState<byte[]> state1) {
 			}
 		};
 	}

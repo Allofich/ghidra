@@ -32,7 +32,7 @@ import ghidra.trace.model.breakpoint.TraceBreakpoint;
 import ghidra.trace.model.breakpoint.TraceBreakpointManager;
 import ghidra.trace.model.context.TraceRegisterContextManager;
 import ghidra.trace.model.data.TraceBasedDataTypeManager;
-import ghidra.trace.model.guest.TracePlatformManager;
+import ghidra.trace.model.guest.*;
 import ghidra.trace.model.listing.*;
 import ghidra.trace.model.memory.*;
 import ghidra.trace.model.modules.*;
@@ -275,6 +275,12 @@ public interface Trace extends DataTypeManagerDomainObject {
 		// NOTE: No MOVING, SPLITTING, or JOINING
 	}
 
+	public static final class TraceOverlaySpaceChangeType
+			extends DefaultTraceChangeType<Trace, AddressSpace> {
+		public static final TraceOverlaySpaceChangeType ADDED = new TraceOverlaySpaceChangeType();
+		public static final TraceOverlaySpaceChangeType DELETED = new TraceOverlaySpaceChangeType();
+	}
+
 	public static final class TraceMemoryStateChangeType<U>
 			extends DefaultTraceChangeType<TraceAddressSnapRange, U> {
 		public static final TraceMemoryStateChangeType<TraceMemoryState> CHANGED =
@@ -379,6 +385,16 @@ public interface Trace extends DataTypeManagerDomainObject {
 		public static final TraceSnapshotChangeType<Void> DELETED = new TraceSnapshotChangeType<>();
 	}
 
+	public static final class TracePlatformChangeType<U>
+			extends DefaultTraceChangeType<TraceGuestPlatform, U> {
+		public static final TracePlatformChangeType<Void> ADDED = new TracePlatformChangeType<>();
+		public static final TracePlatformChangeType<Void> DELETED = new TracePlatformChangeType<>();
+		public static final TracePlatformChangeType<TraceGuestPlatformMappedRange> MAPPING_ADDED =
+			new TracePlatformChangeType<>();
+		public static final TracePlatformChangeType<TraceGuestPlatformMappedRange> MAPPING_DELETED =
+			new TracePlatformChangeType<>();
+	}
+
 	public interface TraceProgramViewListener {
 		void viewCreated(TraceProgramView view);
 	}
@@ -445,6 +461,8 @@ public interface Trace extends DataTypeManagerDomainObject {
 	 * @return the canonical program view
 	 */
 	TraceVariableSnapProgramView getProgramView();
+
+	TraceTimeViewport createTimeViewport();
 
 	void addProgramViewListener(TraceProgramViewListener listener);
 

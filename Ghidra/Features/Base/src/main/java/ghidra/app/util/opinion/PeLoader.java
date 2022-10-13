@@ -26,7 +26,6 @@ import ghidra.app.util.bin.ByteProvider;
 import ghidra.app.util.bin.format.mz.DOSHeader;
 import ghidra.app.util.bin.format.pe.*;
 import ghidra.app.util.bin.format.pe.ImageCor20Header.ImageCor20Flags;
-import ghidra.app.util.bin.format.pe.ImageRuntimeFunctionEntries._IMAGE_RUNTIME_FUNCTION_ENTRY;
 import ghidra.app.util.bin.format.pe.PortableExecutable.SectionLayout;
 import ghidra.app.util.bin.format.pe.debug.DebugCOFFSymbol;
 import ghidra.app.util.bin.format.pe.debug.DebugDirectoryParser;
@@ -134,8 +133,6 @@ public class PeLoader extends AbstractPeDebugLoader {
 				}
 			}
 
-			setProcessorContext(fileHeader, program, monitor, log);
-
 			processExports(optionalHeader, program, monitor, log);
 			processImports(optionalHeader, program, monitor, log);
 			processDelayImports(optionalHeader, program, monitor, log);
@@ -144,7 +141,6 @@ public class PeLoader extends AbstractPeDebugLoader {
 			processProperties(optionalHeader, program, monitor);
 			processComments(program.getListing(), monitor);
 			processSymbols(ntHeader, sectionToAddress, program, monitor, log);
-			processImageRuntimeFunctionEntries(fileHeader, program, monitor, log);
 
 			processEntryPoints(ntHeader, program, monitor);
 			String compiler = CompilerOpinion.getOpinion(pe, provider).toString();
@@ -256,41 +252,6 @@ public class PeLoader extends AbstractPeDebugLoader {
 		}
 		catch (Exception e1) {
 			Msg.error(this, "Error laying down header structures " + e1);
-		}
-	}
-
-	private void processImageRuntimeFunctionEntries(FileHeader fileHeader, Program program,
-			TaskMonitor monitor, MessageLog log) {
-
-		// Check to see that we have exception data to process
-		SectionHeader irfeHeader = null;
-		for (SectionHeader header : fileHeader.getSectionHeaders()) {
-			if (header.getName().contains(".pdata")) {
-				irfeHeader = header;
-				break;
-			}
-		}
-
-		if (irfeHeader == null) {
-			return;
-		}
-
-		Address start = program.getImageBase().add(irfeHeader.getVirtualAddress());
-
-		List<_IMAGE_RUNTIME_FUNCTION_ENTRY> irfes = fileHeader.getImageRuntimeFunctionEntries();
-
-		if (irfes.isEmpty()) {
-			return;
-		}
-
-		// TODO: This is x86-64 architecture-specific and needs to be generalized.
-		ImageRuntimeFunctionEntries.createData(program, start, irfes);
-
-		// Each RUNTIME_INFO contains an address to an UNWIND_INFO structure
-		// which also needs to be laid out. When they contain chaining data
-		// they're recursive but the toDataType() function handles that.
-		for (_IMAGE_RUNTIME_FUNCTION_ENTRY entry : irfes) {
-			entry.createData(program);
 		}
 	}
 
@@ -581,27 +542,6 @@ public class PeLoader extends AbstractPeDebugLoader {
 
 		if (codeProp != null) {
 			codeProp.add(address, address);
-		}
-	}
-
-	private void setProcessorContext(FileHeader fileHeader, Program program, TaskMonitor monitor,
-			MessageLog log) {
-
-		try {
-			String machineName = fileHeader.getMachineName();
-			if ("450".equals(machineName) || "452".equals(machineName)) {
-				Register tmodeReg = program.getProgramContext().getRegister("TMode");
-				if (tmodeReg == null) {
-					return;
-				}
-				RegisterValue thumbMode = new RegisterValue(tmodeReg, BigInteger.ONE);
-				AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
-				program.getProgramContext()
-						.setRegisterValue(space.getMinAddress(), space.getMaxAddress(), thumbMode);
-			}
-		}
-		catch (ContextChangeException e) {
-			throw new AssertException("instructions should not exist");
 		}
 	}
 

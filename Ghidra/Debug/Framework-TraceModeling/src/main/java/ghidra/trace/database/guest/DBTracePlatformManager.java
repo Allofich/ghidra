@@ -21,15 +21,16 @@ import java.util.concurrent.locks.ReadWriteLock;
 
 import db.DBHandle;
 import ghidra.lifecycle.Internal;
-import ghidra.program.model.address.Address;
-import ghidra.program.model.address.AddressSetView;
+import ghidra.program.model.address.*;
 import ghidra.program.model.lang.*;
 import ghidra.program.model.mem.MemBuffer;
 import ghidra.trace.database.DBTrace;
 import ghidra.trace.database.DBTraceManager;
 import ghidra.trace.database.guest.DBTraceGuestPlatform.DBTraceGuestLanguage;
 import ghidra.trace.model.Trace;
+import ghidra.trace.model.Trace.TracePlatformChangeType;
 import ghidra.trace.model.guest.*;
+import ghidra.trace.util.TraceChangeRecord;
 import ghidra.util.LockHold;
 import ghidra.util.database.*;
 import ghidra.util.exception.CancelledException;
@@ -105,8 +106,28 @@ public class DBTracePlatformManager implements DBTraceManager, TracePlatformMana
 		}
 
 		@Override
+		public AddressRange mapHostToGuest(AddressRange hostRange) {
+			return hostRange;
+		}
+
+		@Override
+		public AddressSetView mapHostToGuest(AddressSetView hostSet) {
+			return hostSet;
+		}
+
+		@Override
 		public Address mapGuestToHost(Address guestAddress) {
 			return guestAddress;
+		}
+
+		@Override
+		public AddressRange mapGuestToHost(AddressRange guestRange) {
+			return guestRange;
+		}
+
+		@Override
+		public AddressSetView mapGuestToHost(AddressSetView guestSet) {
+			return guestSet;
 		}
 
 		@Override
@@ -261,6 +282,7 @@ public class DBTracePlatformManager implements DBTraceManager, TracePlatformMana
 			platformsByCompiler.remove(platform.getCompilerSpec());
 			platformStore.delete(platform);
 		}
+		trace.setChanged(new TraceChangeRecord<>(TracePlatformChangeType.DELETED, null, platform));
 	}
 
 	@Override
@@ -281,9 +303,12 @@ public class DBTracePlatformManager implements DBTraceManager, TracePlatformMana
 			throw new IllegalArgumentException(
 				"Base compiler spec cannot be a guest compiler spec");
 		}
+		DBTraceGuestPlatform platform;
 		try (LockHold hold = LockHold.lock(lock.writeLock())) {
-			return doAddGuestPlatform(compilerSpec);
+			platform = doAddGuestPlatform(compilerSpec);
 		}
+		trace.setChanged(new TraceChangeRecord<>(TracePlatformChangeType.ADDED, null, platform));
+		return platform;
 	}
 
 	@Override
@@ -297,18 +322,21 @@ public class DBTracePlatformManager implements DBTraceManager, TracePlatformMana
 	}
 
 	@Override
-	public DBTraceGuestPlatform getOrAddGuestPlatform(CompilerSpec compilerSpec) {
+	public InternalTracePlatform getOrAddPlatform(CompilerSpec compilerSpec) {
 		if (compilerSpec.getCompilerSpecID()
 				.equals(trace.getBaseCompilerSpec().getCompilerSpecID())) {
-			throw new IllegalArgumentException("Base language cannot be a guest language");
+			return hostPlatform;
 		}
+		DBTraceGuestPlatform platform;
 		try (LockHold hold = LockHold.lock(lock.writeLock())) {
 			DBTraceGuestPlatform exists = platformsByCompiler.get(compilerSpec);
 			if (exists != null) {
 				return exists;
 			}
-			return doAddGuestPlatform(compilerSpec);
+			platform = doAddGuestPlatform(compilerSpec);
 		}
+		trace.setChanged(new TraceChangeRecord<>(TracePlatformChangeType.ADDED, null, platform));
+		return platform;
 	}
 
 	@Override
@@ -332,5 +360,19 @@ public class DBTracePlatformManager implements DBTraceManager, TracePlatformMana
 			throw new IllegalArgumentException("Given platform has been deleted");
 		}
 		return dbPlatform;
+	}
+
+	protected Address computeNextRegisterMin() {
+		AddressRange hostRegsRange = hostPlatform.getRegistersRange();
+		Address next = hostRegsRange == null
+				? hostPlatform.getAddressFactory().getRegisterSpace().getAddress(0)
+				: hostRegsRange.getMaxAddress().add(1);
+		for (DBTraceGuestPlatform guest : platformStore.asMap().values()) {
+			Address candidateNext = guest.computeNextRegisterMin();
+			if (candidateNext != null && next.compareTo(candidateNext) < 0) {
+				next = candidateNext;
+			}
+		}
+		return next;
 	}
 }

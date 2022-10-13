@@ -18,6 +18,7 @@ package ghidra.app.services;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
 import ghidra.app.plugin.core.debug.service.breakpoint.DebuggerLogicalBreakpointServicePlugin;
 import ghidra.app.services.LogicalBreakpoint.State;
@@ -146,6 +147,16 @@ public interface DebuggerLogicalBreakpointService {
 	 * @param l the listener to remove
 	 */
 	void removeChangeListener(LogicalBreakpointsChangeListener l);
+
+	/**
+	 * Get a future which completes after pending changes have been processed
+	 * 
+	 * <p>
+	 * The returned future completes after all change listeners have been invoked
+	 * 
+	 * @return the future
+	 */
+	CompletableFuture<Void> changesSettled();
 
 	static <T> T programOrTrace(ProgramLocation loc,
 			BiFunction<? super Program, ? super Address, ? extends T> progFunc,
@@ -282,6 +293,23 @@ public interface DebuggerLogicalBreakpointService {
 			Collection<TraceBreakpointKind> kinds, String name);
 
 	/**
+	 * Generate an informational status message when enabling the selected breakpoints
+	 * 
+	 * <p>
+	 * Breakpoint enabling may fail for a variety of reasons. Some of those reasons deal with the
+	 * trace database and GUI rather than with the target. When enabling will not likely behave in
+	 * the manner expected by the user, this should provide a message explaining why. For example,
+	 * if a breakpoint has no locations on a target, then we already know "enable" will not work.
+	 * This should explain the situation to the user. If enabling is expected to work, then this
+	 * should return null.
+	 * 
+	 * @param col the collection we're about to enable
+	 * @param trace a trace, if the command will be limited to the given trace
+	 * @return the status message, or null
+	 */
+	String generateStatusEnable(Collection<LogicalBreakpoint> col, Trace trace);
+
+	/**
 	 * Enable a collection of logical breakpoints on target, if applicable
 	 * 
 	 * <p>
@@ -341,4 +369,29 @@ public interface DebuggerLogicalBreakpointService {
 	 * @return a future which completes when the command has been processed
 	 */
 	CompletableFuture<Void> deleteLocs(Collection<TraceBreakpoint> col);
+
+	/**
+	 * Generate an informational message when toggling the breakpoints at the given location
+	 * 
+	 * <p>
+	 * This works in the same manner as {@link #generateStatusEnable(Collection)}, except it is for
+	 * toggling breakpoints at a given location. If there are no breakpoints at the location, this
+	 * should return null, since the usual behavior in that case is to prompt to place a new
+	 * breakpoint.
+	 * 
+	 * @see #generateStatusEnable(Collection)
+	 * @param loc the location
+	 * @return the status message, or null
+	 */
+	String generateStatusToggleAt(ProgramLocation loc);
+
+	/**
+	 * Toggle the breakpoints at the given location
+	 * 
+	 * @param location the location
+	 * @param placer if there are no breakpoints, a routine for placing a breakpoint
+	 * @return a future which completes when the command has been processed
+	 */
+	CompletableFuture<Set<LogicalBreakpoint>> toggleBreakpointsAt(ProgramLocation location,
+			Supplier<CompletableFuture<Set<LogicalBreakpoint>>> placer);
 }

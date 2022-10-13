@@ -80,8 +80,8 @@ public interface DebuggerResources {
 
 	ImageIcon ICON_LAUNCH = ResourceManager.loadImage("images/launch.png");
 	ImageIcon ICON_ATTACH = ResourceManager.loadImage("images/attach.png");
-	ImageIcon ICON_RESUME = ResourceManager.loadImage("images/continue.png");
-	ImageIcon ICON_TERMINATE = ResourceManager.loadImage("images/stop.png");
+	ImageIcon ICON_RESUME = ResourceManager.loadImage("images/resume.png");
+	ImageIcon ICON_INTERRUPT = ResourceManager.loadImage("images/interrupt.png");
 	ImageIcon ICON_KILL = ResourceManager.loadImage("images/kill.png");
 	ImageIcon ICON_DETACH = ResourceManager.loadImage("images/detach.png");
 	ImageIcon ICON_RECORD = ResourceManager.loadImage("images/record.png");
@@ -91,10 +91,11 @@ public interface DebuggerResources {
 	ImageIcon ICON_SKIP_OVER = ResourceManager.loadImage("images/skipover.png");
 	ImageIcon ICON_STEP_FINISH = ResourceManager.loadImage("images/stepout.png");
 	ImageIcon ICON_STEP_BACK = ResourceManager.loadImage("images/stepback.png");
+	ImageIcon ICON_STEP_LAST = ResourceManager.loadImage("images/steplast.png");
 	// TODO: Draw new icons?
 	ImageIcon ICON_SNAP_FORWARD = ResourceManager.loadImage("images/2rightarrow.png");
 	ImageIcon ICON_SNAP_BACKWARD = ResourceManager.loadImage("images/2leftarrow.png");
-	ImageIcon ICON_SEEK_PRESENT = ICON_RESUME;
+	ImageIcon ICON_SEEK_PRESENT = ResourceManager.loadImage("images/seek-present.png");
 
 	ImageIcon ICON_SET_BREAKPOINT = ResourceManager.loadImage("images/breakpoint-enable.png");
 	ImageIcon ICON_CLEAR_BREAKPOINT = ResourceManager.loadImage("images/breakpoint-clear.png");
@@ -572,6 +573,21 @@ public interface DebuggerResources {
 		}
 	}
 
+	interface ConfigureEmulatorAction {
+		String NAME = "Configure Emulator";
+		String DESCRIPTION = "Choose and configure the current emulator";
+		String GROUP = GROUP_MAINTENANCE;
+		String HELP_ANCHOR = "configure_emulator";
+
+		static ToggleActionBuilder builder(Plugin owner) {
+			String ownerName = owner.getName();
+			return new ToggleActionBuilder(NAME, ownerName)
+					.description(DESCRIPTION)
+					.menuGroup(GROUP)
+					.helpLocation(new HelpLocation(ownerName, HELP_ANCHOR));
+		}
+	}
+
 	abstract class AbstractQuickLaunchAction extends DockingAction {
 		public static final String NAME = "Quick Launch";
 		public static final Icon ICON = ICON_DEBUGGER; // TODO: A different icon?
@@ -677,7 +693,7 @@ public interface DebuggerResources {
 
 	abstract class AbstractStepLastAction extends DockingAction {
 		public static final String NAME = "Step Last";
-		public static final Icon ICON = ICON_STEP_FINISH; // TODO: Draw one
+		public static final Icon ICON = ICON_STEP_LAST;
 		public static final String HELP_ANCHOR = "step_last";
 
 		public static HelpLocation help(Plugin owner) {
@@ -693,7 +709,7 @@ public interface DebuggerResources {
 
 	abstract class AbstractInterruptAction extends DockingAction {
 		public static final String NAME = "Interrupt";
-		public static final Icon ICON = ICON_TERMINATE;
+		public static final Icon ICON = ICON_INTERRUPT;
 		public static final String HELP_ANCHOR = "interrupt";
 
 		public static HelpLocation help(Plugin owner) {
@@ -758,7 +774,7 @@ public interface DebuggerResources {
 		String HELP_ANCHOR = "disconnect_all";
 
 		public static ActionBuilder builder(Plugin owner, Plugin helpOwner) {
-			return new ActionBuilder(owner.getName(), NAME)
+			return new ActionBuilder(NAME, owner.getName())
 					.description(DESCRIPTION)
 					.menuIcon(ICON)
 					.helpLocation(new HelpLocation(helpOwner.getName(), HELP_ANCHOR));
@@ -773,7 +789,7 @@ public interface DebuggerResources {
 
 		public static ToggleActionBuilder builder(Plugin owner) {
 			String ownerName = owner.getName();
-			return new ToggleActionBuilder(ownerName, NAME)
+			return new ToggleActionBuilder(NAME, ownerName)
 					.description(DESCRIPTION)
 					.toolBarIcon(ICON)
 					.helpLocation(new HelpLocation(ownerName, HELP_ANCHOR));
@@ -783,12 +799,12 @@ public interface DebuggerResources {
 	interface InterpreterInterruptAction {
 		String NAME = "Interpreter Interrupt";
 		String DESCRIPTION = "Send an interrupt through this Interpreter";
-		Icon ICON = ICON_TERMINATE;
+		Icon ICON = ICON_INTERRUPT;
 		String HELP_ANCHOR = "interrupt";
 
 		public static ActionBuilder builder(Plugin owner) {
 			String ownerName = owner.getName();
-			return new ActionBuilder(ownerName, NAME)
+			return new ActionBuilder(NAME, ownerName)
 					.description(DESCRIPTION)
 					.toolBarIcon(ICON)
 					.keyBinding("CTRL I")
@@ -805,7 +821,7 @@ public interface DebuggerResources {
 
 		public static ActionBuilder builder(Plugin owner) {
 			String ownerName = owner.getName();
-			return new ActionBuilder(ownerName, NAME)
+			return new ActionBuilder(NAME, ownerName)
 					.description(DESCRIPTION)
 					.menuPath(DebuggerPluginPackage.NAME, NAME)
 					.menuGroup(GROUP)
@@ -844,11 +860,16 @@ public interface DebuggerResources {
 		String HELP_ANCHOR = "track_location";
 
 		String NAME_PC = "Track Program Counter";
+		String NAME_PC_BY_REGISTER = "Track Program Counter (by Register)";
+		String NAME_PC_BY_STACK = "Track Program Counter (by Stack)";
 		String NAME_SP = "Track Stack Pointer";
 		String NAME_NONE = "Do Not Track";
+		String NAME_PREFIX_WATCH = "Track address of watch: ";
 
 		// TODO: Separate icons for Program Counter and Stack Pointer
 		Icon ICON_PC = ICON_REGISTER_MARKER;
+		Icon ICON_PC_BY_REGISTER = ICON_REGISTER_MARKER;
+		Icon ICON_PC_BY_STACK = ICON_REGISTER_MARKER;
 		Icon ICON_SP = ICON_REGISTER_MARKER;
 		// TODO: Consider sync_disabled icon
 		Icon ICON_NONE = ICON_DELETE;
@@ -1414,159 +1435,36 @@ public interface DebuggerResources {
 		}
 	}
 
-	interface MapIdenticallyAction {
-		String NAME = "Map Identically";
-		String DESCRIPTION =
-			"Map the current trace to the current program using identical addresses";
-		Icon ICON = ICON_MAP_IDENTICALLY;
-		String GROUP = GROUP_MAPPING;
-		String HELP_ANCHOR = "map_identically";
+	String NAME_MAP_IDENTICALLY = "Map Identically";
+	String DESCRIPTION_MAP_IDENTICALLY =
+		"Map the current trace to the current program using identical addresses";
 
-		static ActionBuilder builder(Plugin owner) {
-			String ownerName = owner.getName();
-			return new ActionBuilder(NAME, ownerName).description(DESCRIPTION)
-					.toolBarIcon(ICON)
-					.toolBarGroup(GROUP)
-					.helpLocation(new HelpLocation(ownerName, HELP_ANCHOR));
-		}
-	}
+	String NAME_MAP_MANUALLY = "Map Manually";
+	String DESCRIPTION_MAP_MANUALLY = "Map the current trace to various programs manually";
 
-	interface MapModulesAction {
-		String NAME = "Map Modules";
-		String DESCRIPTION = "Map selected modules to program images";
-		Icon ICON = ICON_MAP_MODULES; // TODO: Probably no icon
-		String GROUP = GROUP_MAPPING;
-		String HELP_ANCHOR = "map_modules";
+	String NAME_MAP_MODULES = "Map Modules";
+	String DESCRIPTION_MAP_MODULES = "Map selected modules to program images";
 
-		static ActionBuilder builder(Plugin owner) {
-			String ownerName = owner.getName();
-			return new ActionBuilder(NAME, ownerName).description(DESCRIPTION)
-					//.toolBarIcon(ICON)
-					//.toolBarGroup(GROUP)
-					//.popupMenuIcon(ICON)
-					.popupMenuPath(NAME)
-					.popupMenuGroup(GROUP)
-					.helpLocation(new HelpLocation(ownerName, HELP_ANCHOR));
-		}
-	}
+	String NAME_PREFIX_MAP_MODULE_TO = "Map Module to ";
+	String DESCRIPTION_MAP_MODULE_TO = "Map the selected module to the current program";
 
-	interface MapModuleToAction {
-		String NAME_PREFIX = "Map Module to ";
-		String DESCRIPTION = "Map the selected module to the current program";
-		Icon ICON = ICON_MAP_MODULES; // TODO: Probably no icon
-		String GROUP = GROUP_MAPPING;
-		String HELP_ANCHOR = "map_module_to";
+	String NAME_MAP_SECTIONS = "Map Sections";
+	String DESCRIPTION_MAP_SECTIONS = "Map selected sections to program memory blocks";
 
-		static ActionBuilder builder(Plugin owner) {
-			String ownerName = owner.getName();
-			return new ActionBuilder(NAME_PREFIX, ownerName).description(DESCRIPTION)
-					.popupMenuPath(NAME_PREFIX + "...")
-					.popupMenuGroup(GROUP)
-					.helpLocation(new HelpLocation(ownerName, HELP_ANCHOR));
-		}
-	}
+	String NAME_PREFIX_MAP_SECTION_TO = "Map Section to ";
+	String DESCRIPTION_MAP_SECTION_TO = "Map the selected section to the current program";
 
-	interface MapSectionsAction {
-		String NAME = "Map Sections";
-		String DESCRIPTION = "Map selected sections to program memory blocks";
-		Icon ICON = ICON_MAP_SECTIONS; // TODO: Probably no icon
-		String GROUP = GROUP_MAPPING;
-		String HELP_ANCHOR = "map_sections";
+	String NAME_PREFIX_MAP_SECTIONS_TO = "Map Sections to ";
+	String DESCRIPTION_MAP_SECTIONS_TO = "Map the selected module sections to the current program";
 
-		static ActionBuilder builder(Plugin owner) {
-			String ownerName = owner.getName();
-			return new ActionBuilder(NAME, ownerName).description(DESCRIPTION)
-					//.toolBarIcon(ICON)
-					//.toolBarGroup(GROUP)
-					//.popupMenuIcon(ICON)
-					.popupMenuPath(NAME)
-					.popupMenuGroup(GROUP)
-					.helpLocation(new HelpLocation(ownerName, HELP_ANCHOR));
-		}
-	}
+	String NAME_MAP_REGIONS = "Map Regions";
+	String DESCRIPTION_MAP_REGIONS = "Map selected regions to program memory blocks";
 
-	interface MapSectionToAction {
-		String NAME_PREFIX = "Map Section to ";
-		String DESCRIPTION = "Map the selected section to the current program";
-		Icon ICON = ICON_MAP_SECTIONS; // TODO: Probably no icon
-		String GROUP = GROUP_MAPPING;
-		String HELP_ANCHOR = "map_section_to";
+	String NAME_PREFIX_MAP_REGION_TO = "Map Region to ";
+	String DESCRIPTION_MAP_REGION_TO = "Map the selected region to the current program";
 
-		static ActionBuilder builder(Plugin owner) {
-			String ownerName = owner.getName();
-			return new ActionBuilder(NAME_PREFIX, ownerName).description(DESCRIPTION)
-					.popupMenuPath(NAME_PREFIX + "...")
-					.popupMenuGroup(GROUP)
-					.helpLocation(new HelpLocation(ownerName, HELP_ANCHOR));
-		}
-	}
-
-	interface MapSectionsToAction {
-		String NAME_PREFIX = "Map Sections to ";
-		String DESCRIPTION = "Map the selected module sections to the current program";
-		Icon ICON = ICON_MAP_SECTIONS;
-		String GROUP = GROUP_MAPPING;
-		String HELP_ANCHOR = "map_sections_to";
-
-		static ActionBuilder builder(Plugin owner) {
-			String ownerName = owner.getName();
-			return new ActionBuilder(NAME_PREFIX, ownerName).description(DESCRIPTION)
-					.popupMenuPath(NAME_PREFIX + "...")
-					.popupMenuGroup(GROUP)
-					.helpLocation(new HelpLocation(ownerName, HELP_ANCHOR));
-		}
-	}
-
-	interface MapRegionsAction {
-		String NAME = "Map Regions";
-		String DESCRIPTION = "Map selected regions to program memory blocks";
-		Icon ICON = ICON_MAP_REGIONS; // TODO: Probably no icon
-		String GROUP = GROUP_MAPPING;
-		String HELP_ANCHOR = "map_regions";
-
-		static ActionBuilder builder(Plugin owner) {
-			String ownerName = owner.getName();
-			return new ActionBuilder(NAME, ownerName).description(DESCRIPTION)
-					//.toolBarIcon(ICON)
-					//.toolBarGroup(GROUP)
-					//.popupMenuIcon(ICON)
-					.popupMenuPath(NAME)
-					.popupMenuGroup(GROUP)
-					.helpLocation(new HelpLocation(ownerName, HELP_ANCHOR));
-		}
-	}
-
-	interface MapRegionToAction {
-		String NAME_PREFIX = "Map Region to ";
-		String DESCRIPTION = "Map the selected region to the current program";
-		Icon ICON = ICON_MAP_SECTIONS; // TODO: Probably no icon
-		String GROUP = GROUP_MAPPING;
-		String HELP_ANCHOR = "map_region_to";
-
-		static ActionBuilder builder(Plugin owner) {
-			String ownerName = owner.getName();
-			return new ActionBuilder(NAME_PREFIX, ownerName).description(DESCRIPTION)
-					.popupMenuPath(NAME_PREFIX + "...")
-					.popupMenuGroup(GROUP)
-					.helpLocation(new HelpLocation(ownerName, HELP_ANCHOR));
-		}
-	}
-
-	interface MapRegionsToAction {
-		String NAME_PREFIX = "Map Regions to ";
-		String DESCRIPTION = "Map the selected (module) regions to the current program";
-		Icon ICON = ICON_MAP_SECTIONS;
-		String GROUP = GROUP_MAPPING;
-		String HELP_ANCHOR = "map_regions_to";
-
-		static ActionBuilder builder(Plugin owner) {
-			String ownerName = owner.getName();
-			return new ActionBuilder(NAME_PREFIX, ownerName).description(DESCRIPTION)
-					.popupMenuPath(NAME_PREFIX + "...")
-					.popupMenuGroup(GROUP)
-					.helpLocation(new HelpLocation(ownerName, HELP_ANCHOR));
-		}
-	}
+	String NAME_PREFIX_MAP_REGIONS_TO = "Map Regions to ";
+	String DESCRIPTION_MAP_REGIONS_TO = "Map the selected (module) regions to the current program";
 
 	/*interface SelectAddressesAction { // TODO: Finish this conversion
 		String NAME = "Select Addresses";
@@ -2377,4 +2275,20 @@ public interface DebuggerResources {
 		}
 	}
 
+	String NAME_CHOOSE_PLATFORM = "Choose Platform";
+	String DESCRIPTION_CHOOSE_PLATFORM = "Choose a platform to use with the current trace";
+
+	String NAME_CHOOSE_MORE_PLATFORMS = "Choose More Platforms";
+	String TITLE_CHOOSE_MORE_PLATFORMS = "More...";
+	String DESCRIPTION_CHOOSE_MORE_PLATFORMS =
+		"Choose from more platforms to use with the current trace";
+
+	String NAME_CLEAR_REGISTER_TYPE = "Clear Register Type";
+	String DESCRIPTION_CLEAR_REGISTER_TYPE = "Clear the register's data type";
+
+	String NAME_REGISTER_TYPE_SETTINGS = "Register Type Settings";
+	String DESCRIPTION_REGISTER_TYPE_SETTINGS = "Set the register's data type settings";
+
+	String NAME_WATCH_TYPE_SETTINGS = "Watch Type Settings";
+	String DESCRIPTION_WATCH_TYPE_SETTINGS = "Set the watch's data type settings";
 }

@@ -48,7 +48,7 @@ import ghidra.app.plugin.core.debug.DebuggerCoordinates;
 import ghidra.app.plugin.core.debug.gui.AbstractGhidraHeadedDebuggerGUITest;
 import ghidra.app.plugin.core.debug.gui.DebuggerResources;
 import ghidra.app.plugin.core.debug.gui.DebuggerResources.FollowsCurrentThreadAction;
-import ghidra.app.plugin.core.debug.gui.action.DebuggerGoToDialog;
+import ghidra.app.plugin.core.debug.gui.action.*;
 import ghidra.app.plugin.core.debug.gui.listing.DebuggerListingPlugin;
 import ghidra.app.plugin.core.debug.service.editing.DebuggerStateEditingServicePlugin;
 import ghidra.app.services.DebuggerStateEditingService;
@@ -158,7 +158,7 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 			// NOTE: PC-tracking should be the default for the main bytes viewer
 			Register pc = tb.trace.getBaseLanguage().getProgramCounter();
-			TraceMemoryRegisterSpace regs = memory.getMemoryRegisterSpace(thread, true);
+			TraceMemorySpace regs = memory.getMemoryRegisterSpace(thread, true);
 			regs.setValue(0, new RegisterValue(pc, BigInteger.valueOf(0x00401234)));
 		}
 		waitForDomainObject(tb.trace);
@@ -184,7 +184,7 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 			// NOTE: PC-tracking should be the default for the main bytes viewer
 			Register pc = tb.trace.getBaseLanguage().getProgramCounter();
-			TraceMemoryRegisterSpace regs = memory.getMemoryRegisterSpace(thread, true);
+			TraceMemorySpace regs = memory.getMemoryRegisterSpace(thread, true);
 			regs.setValue(1, new RegisterValue(pc, BigInteger.valueOf(0x00401234)));
 		}
 		waitForDomainObject(tb.trace);
@@ -214,9 +214,9 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 			// NOTE: PC-tracking should be the default for the main bytes viewer
 			Register pc = tb.trace.getBaseLanguage().getProgramCounter();
-			TraceMemoryRegisterSpace regs1 = memory.getMemoryRegisterSpace(thread1, true);
+			TraceMemorySpace regs1 = memory.getMemoryRegisterSpace(thread1, true);
 			regs1.setValue(0, new RegisterValue(pc, BigInteger.valueOf(0x00401234)));
-			TraceMemoryRegisterSpace regs2 = memory.getMemoryRegisterSpace(thread2, true);
+			TraceMemorySpace regs2 = memory.getMemoryRegisterSpace(thread2, true);
 			regs2.setValue(0, new RegisterValue(pc, BigInteger.valueOf(0x00405678)));
 		}
 		waitForDomainObject(tb.trace);
@@ -248,7 +248,8 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 		TraceThread thread1;
 		TraceThread thread2;
 		DebuggerMemoryBytesProvider extraProvider = SwingExecutorService.LATER
-				.submit(() -> memBytesPlugin.createViewerIfMissing(trackPc, true))
+				.submit(() -> memBytesPlugin.createViewerIfMissing(PCLocationTrackingSpec.INSTANCE,
+					true))
 				.get();
 		try (UndoableTransaction tid = tb.startTransaction()) {
 			DBTraceMemoryManager memory = tb.trace.getMemoryManager();
@@ -259,9 +260,9 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 			// NOTE: PC-tracking should be the default for the main bytes viewer
 			Register pc = tb.trace.getBaseLanguage().getProgramCounter();
-			TraceMemoryRegisterSpace regs1 = memory.getMemoryRegisterSpace(thread1, true);
+			TraceMemorySpace regs1 = memory.getMemoryRegisterSpace(thread1, true);
 			regs1.setValue(0, new RegisterValue(pc, BigInteger.valueOf(0x00401234)));
-			TraceMemoryRegisterSpace regs2 = memory.getMemoryRegisterSpace(thread2, true);
+			TraceMemorySpace regs2 = memory.getMemoryRegisterSpace(thread2, true);
 			regs2.setValue(0, new RegisterValue(pc, BigInteger.valueOf(0x00405678)));
 		}
 		waitForDomainObject(tb.trace);
@@ -299,7 +300,7 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 			assertEquals(tb.trace.getProgramView(), memBytesProvider.getProgram());
 
-			TraceMemoryRegisterSpace regs = memory.getMemoryRegisterSpace(thread, true);
+			TraceMemorySpace regs = memory.getMemoryRegisterSpace(thread, true);
 			Register sp = tb.trace.getBaseCompilerSpec().getStackPointer();
 			regs.setValue(0, new RegisterValue(sp, BigInteger.valueOf(0x01fff800)));
 		}
@@ -307,16 +308,16 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 		//Pre-check
 		assertNull(memBytesProvider.getLocation());
 
-		runSwing(() -> memBytesProvider.setTrackingSpec(trackSp));
+		runSwing(() -> memBytesProvider.setTrackingSpec(SPLocationTrackingSpec.INSTANCE));
 
-		ProgramLocation loc = memBytesProvider.getLocation();
+		ProgramLocation loc = waitForValue(() -> memBytesProvider.getLocation());
 		assertEquals(tb.trace.getProgramView(), loc.getProgram());
 		assertEquals(tb.addr(0x01fff800), loc.getAddress());
 	}
 
 	@Test
 	public void testFollowsCurrentTraceOnTraceChangeWithoutRegisterTracking() throws Exception {
-		runSwing(() -> memBytesProvider.setTrackingSpec(trackNone));
+		runSwing(() -> memBytesProvider.setTrackingSpec(NoneLocationTrackingSpec.INSTANCE));
 		try ( //
 				ToyDBTraceBuilder b1 =
 					new ToyDBTraceBuilder(name.getMethodName() + "_1", LANGID_TOYBE64); //
@@ -332,7 +333,7 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 				t1 = b1.getOrAddThread("Thread1", 0);
 
 				Register pc = b1.trace.getBaseLanguage().getProgramCounter();
-				TraceMemoryRegisterSpace regs = memory.getMemoryRegisterSpace(t1, true);
+				TraceMemorySpace regs = memory.getMemoryRegisterSpace(t1, true);
 				regs.setValue(0, new RegisterValue(pc, BigInteger.valueOf(0x00401234)));
 			}
 			waitForDomainObject(b1.trace);
@@ -344,7 +345,7 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 				t2 = b2.getOrAddThread("Thread2", 0);
 
 				Register pc = b2.trace.getBaseLanguage().getProgramCounter();
-				TraceMemoryRegisterSpace regs = memory.getMemoryRegisterSpace(t2, true);
+				TraceMemorySpace regs = memory.getMemoryRegisterSpace(t2, true);
 				regs.setValue(0, new RegisterValue(pc, BigInteger.valueOf(0x00405678)));
 			}
 			waitForDomainObject(b1.trace);
@@ -367,7 +368,7 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 	@Test
 	public void testFollowsCurrentThreadOnThreadChangeWithoutRegisterTracking() throws Exception {
-		runSwing(() -> memBytesProvider.setTrackingSpec(trackNone));
+		runSwing(() -> memBytesProvider.setTrackingSpec(NoneLocationTrackingSpec.INSTANCE));
 		try ( //
 				ToyDBTraceBuilder b1 =
 					new ToyDBTraceBuilder(name.getMethodName() + "_1", LANGID_TOYBE64); //
@@ -383,7 +384,7 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 				t1 = b1.getOrAddThread("Thread1", 0);
 
 				Register pc = b1.trace.getBaseLanguage().getProgramCounter();
-				TraceMemoryRegisterSpace regs = memory.getMemoryRegisterSpace(t1, true);
+				TraceMemorySpace regs = memory.getMemoryRegisterSpace(t1, true);
 				regs.setValue(0, new RegisterValue(pc, BigInteger.valueOf(0x00401234)));
 			}
 			waitForDomainObject(b1.trace);
@@ -395,7 +396,7 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 				t2 = b2.getOrAddThread("Thread2", 0);
 
 				Register pc = b2.trace.getBaseLanguage().getProgramCounter();
-				TraceMemoryRegisterSpace regs = memory.getMemoryRegisterSpace(t2, true);
+				TraceMemorySpace regs = memory.getMemoryRegisterSpace(t2, true);
 				regs.setValue(0, new RegisterValue(pc, BigInteger.valueOf(0x00405678)));
 			}
 			waitForDomainObject(b1.trace);
@@ -456,7 +457,7 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 			thread = tb.getOrAddThread("Thread1", 0);
 			Register pc = tb.trace.getBaseLanguage().getProgramCounter();
-			TraceMemoryRegisterSpace regs = memory.getMemoryRegisterSpace(thread, true);
+			TraceMemorySpace regs = memory.getMemoryRegisterSpace(thread, true);
 			regs.setValue(0, new RegisterValue(pc, BigInteger.valueOf(0x00401234)));
 		}
 		waitForDomainObject(tb.trace);
@@ -578,7 +579,8 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 		assertEquals("(nowhere)", memBytesProvider.locationLabel.getText());
 
 		DebuggerMemoryBytesProvider extraProvider =
-			runSwing(() -> memBytesPlugin.createViewerIfMissing(trackNone, false));
+			runSwing(() -> memBytesPlugin.createViewerIfMissing(NoneLocationTrackingSpec.INSTANCE,
+				false));
 		waitForSwing();
 		assertEquals(traceManager.getCurrentView(), extraProvider.getProgram());
 		assertEquals("(nowhere)", extraProvider.locationLabel.getText());
@@ -616,7 +618,7 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 			mm.addRegion("exe:.text", Range.atLeast(0L), tb.range(0x00400000, 0x0040ffff),
 				TraceMemoryFlag.READ, TraceMemoryFlag.EXECUTE);
 			thread = tb.getOrAddThread("Thread 1", 0);
-			TraceMemoryRegisterSpace regs = mm.getMemoryRegisterSpace(thread, true);
+			TraceMemorySpace regs = mm.getMemoryRegisterSpace(thread, true);
 			Register r0 = tb.language.getRegister("r0");
 			regs.setValue(0, new RegisterValue(r0, new BigInteger("00401234", 16)));
 			mm.putBytes(0, tb.addr(0x00401234), tb.buf(0x00, 0x40, 0x43, 0x21));
@@ -627,18 +629,21 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 		assertTrue(memBytesProvider.actionGoTo.isEnabled());
 		performAction(memBytesProvider.actionGoTo, false);
-		DebuggerGoToDialog dialog = waitForDialogComponent(DebuggerGoToDialog.class);
-
-		dialog.setExpression("r0");
-		dialog.okCallback();
+		DebuggerGoToDialog dialog1 = waitForDialogComponent(DebuggerGoToDialog.class);
+		runSwing(() -> {
+			dialog1.setExpression("r0");
+			dialog1.okCallback();
+		});
 
 		waitForPass(
 			() -> assertEquals(tb.addr(0x00401234), memBytesProvider.getLocation().getAddress()));
 
 		performAction(memBytesProvider.actionGoTo, false);
-		dialog = waitForDialogComponent(DebuggerGoToDialog.class);
-		dialog.setExpression("*:4 r0");
-		dialog.okCallback();
+		DebuggerGoToDialog dialog2 = waitForDialogComponent(DebuggerGoToDialog.class);
+		runSwing(() -> {
+			dialog2.setExpression("*:4 r0");
+			dialog2.okCallback();
+		});
 
 		waitForPass(
 			() -> assertEquals(tb.addr(0x00404321), memBytesProvider.getLocation().getAddress()));
@@ -656,7 +661,7 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 			mm.addRegion("[stack]", Range.atLeast(0L), tb.range(0x1f000000, 0x1fffffff),
 				TraceMemoryFlag.READ, TraceMemoryFlag.WRITE);
 			thread = tb.getOrAddThread("Thread 1", 0);
-			TraceMemoryRegisterSpace regs = mm.getMemoryRegisterSpace(thread, true);
+			TraceMemorySpace regs = mm.getMemoryRegisterSpace(thread, true);
 			Register pc = tb.language.getProgramCounter();
 			regs.setValue(0, new RegisterValue(pc, new BigInteger("00401234", 16)));
 			Register sp = tb.trace.getBaseCompilerSpec().getStackPointer();
@@ -667,7 +672,8 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 		waitForSwing();
 
 		// Check the default is track pc
-		assertEquals(trackPc, memBytesProvider.actionTrackLocation.getCurrentUserData());
+		assertEquals(PCLocationTrackingSpec.INSTANCE,
+			memBytesProvider.actionTrackLocation.getCurrentUserData());
 		assertEquals(tb.addr(0x00401234), memBytesProvider.getLocation().getAddress());
 
 		goToDyn(tb.addr(0x00400000));
@@ -678,13 +684,15 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 		performAction(memBytesProvider.actionTrackLocation);
 		assertEquals(tb.addr(0x00401234), memBytesProvider.getLocation().getAddress());
 
-		setActionStateWithTrigger(memBytesProvider.actionTrackLocation, trackSp,
+		setActionStateWithTrigger(memBytesProvider.actionTrackLocation,
+			SPLocationTrackingSpec.INSTANCE,
 			EventTrigger.GUI_ACTION);
 		waitForSwing();
 		assertEquals(tb.addr(0x1fff8765), memBytesProvider.getLocation().getAddress());
 
-		runSwing(() -> memBytesProvider.setTrackingSpec(trackNone));
-		assertEquals(trackNone, memBytesProvider.actionTrackLocation.getCurrentUserData());
+		runSwing(() -> memBytesProvider.setTrackingSpec(NoneLocationTrackingSpec.INSTANCE));
+		assertEquals(NoneLocationTrackingSpec.INSTANCE,
+			memBytesProvider.actionTrackLocation.getCurrentUserData());
 	}
 
 	@Test
@@ -708,9 +716,9 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 			// NOTE: PC-tracking should be the default for the main dynamic listing
 			Register pc = tb.trace.getBaseLanguage().getProgramCounter();
-			TraceMemoryRegisterSpace regs1 = memory.getMemoryRegisterSpace(thread1, true);
+			TraceMemorySpace regs1 = memory.getMemoryRegisterSpace(thread1, true);
 			regs1.setValue(0, new RegisterValue(pc, BigInteger.valueOf(0x00401234)));
-			TraceMemoryRegisterSpace regs2 = memory.getMemoryRegisterSpace(thread2, true);
+			TraceMemorySpace regs2 = memory.getMemoryRegisterSpace(thread2, true);
 			regs2.setValue(0, new RegisterValue(pc, BigInteger.valueOf(0x00405678)));
 		}
 		waitForDomainObject(tb.trace);
@@ -718,7 +726,8 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 		// NOTE: Action does not exist for main dynamic listing
 		DebuggerMemoryBytesProvider extraProvider =
-			runSwing(() -> memBytesPlugin.createViewerIfMissing(trackNone, true));
+			runSwing(() -> memBytesPlugin.createViewerIfMissing(NoneLocationTrackingSpec.INSTANCE,
+				true));
 		waitForSwing();
 		assertTrue(extraProvider.actionFollowsCurrentThread.isEnabled());
 		assertTrue(extraProvider.actionFollowsCurrentThread.isSelected());
@@ -899,7 +908,8 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 	@Test
 	public void testActivateThreadTracks() throws Exception {
-		assertEquals(trackPc, memBytesProvider.actionTrackLocation.getCurrentUserData());
+		assertEquals(PCLocationTrackingSpec.INSTANCE,
+			memBytesProvider.actionTrackLocation.getCurrentUserData());
 
 		createAndOpenTrace();
 		Register pc = tb.language.getProgramCounter();
@@ -911,9 +921,9 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 				TraceMemoryFlag.READ, TraceMemoryFlag.EXECUTE);
 			thread1 = tb.getOrAddThread("Thread 1", 0);
 			thread2 = tb.getOrAddThread("Thread 2", 0);
-			TraceMemoryRegisterSpace regs1 = mm.getMemoryRegisterSpace(thread1, true);
+			TraceMemorySpace regs1 = mm.getMemoryRegisterSpace(thread1, true);
 			regs1.setValue(0, new RegisterValue(pc, new BigInteger("00401234", 16)));
-			TraceMemoryRegisterSpace regs2 = mm.getMemoryRegisterSpace(thread2, true);
+			TraceMemorySpace regs2 = mm.getMemoryRegisterSpace(thread2, true);
 			regs2.setValue(0, new RegisterValue(pc, new BigInteger("00404321", 16)));
 		}
 		waitForDomainObject(tb.trace);
@@ -930,7 +940,8 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 	@Test
 	public void testActivateSnapTracks() throws Exception {
-		assertEquals(trackPc, memBytesProvider.actionTrackLocation.getCurrentUserData());
+		assertEquals(PCLocationTrackingSpec.INSTANCE,
+			memBytesProvider.actionTrackLocation.getCurrentUserData());
 
 		createAndOpenTrace();
 		Register pc = tb.language.getProgramCounter();
@@ -940,12 +951,12 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 			mm.addRegion("exe:.text", Range.atLeast(0L), tb.range(0x00400000, 0x0040ffff),
 				TraceMemoryFlag.READ, TraceMemoryFlag.EXECUTE);
 			thread = tb.getOrAddThread("Thread 1", 0);
-			TraceMemoryRegisterSpace regs = mm.getMemoryRegisterSpace(thread, true);
+			TraceMemorySpace regs = mm.getMemoryRegisterSpace(thread, true);
 			regs.setValue(0, new RegisterValue(pc, new BigInteger("00401234", 16)));
 			regs.setValue(1, new RegisterValue(pc, new BigInteger("00404321", 16)));
 		}
 		waitForDomainObject(tb.trace);
-		traceManager.activate(DebuggerCoordinates.threadSnap(thread, 0));
+		traceManager.activate(DebuggerCoordinates.NOWHERE.thread(thread).snap(0));
 		waitForSwing();
 
 		assertEquals(tb.addr(0x00401234), memBytesProvider.getLocation().getAddress());
@@ -958,7 +969,8 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 	@Test
 	public void testActivateFrameTracks() throws Exception {
-		assertEquals(trackPc, memBytesProvider.actionTrackLocation.getCurrentUserData());
+		assertEquals(PCLocationTrackingSpec.INSTANCE,
+			memBytesProvider.actionTrackLocation.getCurrentUserData());
 
 		createAndOpenTrace();
 		TraceThread thread;
@@ -986,7 +998,8 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 	@Test
 	public void testRegsPCChangedTracks() throws Exception {
-		assertEquals(trackPc, memBytesProvider.actionTrackLocation.getCurrentUserData());
+		assertEquals(PCLocationTrackingSpec.INSTANCE,
+			memBytesProvider.actionTrackLocation.getCurrentUserData());
 
 		createAndOpenTrace();
 		DBTraceMemoryManager mm = tb.trace.getMemoryManager();
@@ -996,17 +1009,17 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 			mm.addRegion("exe:.text", Range.atLeast(0L), tb.range(0x00400000, 0x0040ffff),
 				TraceMemoryFlag.READ, TraceMemoryFlag.EXECUTE);
 			thread = tb.getOrAddThread("Thread 1", 0);
-			TraceMemoryRegisterSpace regs = mm.getMemoryRegisterSpace(thread, true);
+			TraceMemorySpace regs = mm.getMemoryRegisterSpace(thread, true);
 			regs.setValue(0, new RegisterValue(pc, new BigInteger("00401234", 16)));
 		}
 		waitForDomainObject(tb.trace);
-		traceManager.activate(DebuggerCoordinates.threadSnap(thread, 0));
+		traceManager.activate(DebuggerCoordinates.NOWHERE.thread(thread).snap(0));
 		waitForSwing();
 
 		assertEquals(tb.addr(0x00401234), memBytesProvider.getLocation().getAddress());
 
 		try (UndoableTransaction tid = tb.startTransaction()) {
-			TraceMemoryRegisterSpace regs = mm.getMemoryRegisterSpace(thread, true);
+			TraceMemorySpace regs = mm.getMemoryRegisterSpace(thread, true);
 			regs.setValue(0, new RegisterValue(pc, new BigInteger("00404321", 16)));
 		}
 		waitForDomainObject(tb.trace);
@@ -1016,7 +1029,8 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 	@Test
 	public void testRegsPCChangedTracksDespiteStackWithNoPC() throws Exception {
-		assertEquals(trackPc, memBytesProvider.actionTrackLocation.getCurrentUserData());
+		assertEquals(PCLocationTrackingSpec.INSTANCE,
+			memBytesProvider.actionTrackLocation.getCurrentUserData());
 
 		createAndOpenTrace();
 		DBTraceMemoryManager mm = tb.trace.getMemoryManager();
@@ -1026,7 +1040,7 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 			mm.addRegion("exe:.text", Range.atLeast(0L), tb.range(0x00400000, 0x0040ffff),
 				TraceMemoryFlag.READ, TraceMemoryFlag.EXECUTE);
 			thread = tb.getOrAddThread("Thread 1", 0);
-			TraceMemoryRegisterSpace regs = mm.getMemoryRegisterSpace(thread, true);
+			TraceMemorySpace regs = mm.getMemoryRegisterSpace(thread, true);
 			regs.setValue(0, new RegisterValue(pc, new BigInteger("00401234", 16)));
 
 			DBTraceStackManager sm = tb.trace.getStackManager();
@@ -1034,13 +1048,13 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 			stack.getFrame(0, true);
 		}
 		waitForDomainObject(tb.trace);
-		traceManager.activate(DebuggerCoordinates.threadSnap(thread, 0));
+		traceManager.activate(DebuggerCoordinates.NOWHERE.thread(thread).snap(0));
 		waitForSwing();
 
 		assertEquals(tb.addr(0x00401234), memBytesProvider.getLocation().getAddress());
 
 		try (UndoableTransaction tid = tb.startTransaction()) {
-			TraceMemoryRegisterSpace regs = mm.getMemoryRegisterSpace(thread, true);
+			TraceMemorySpace regs = mm.getMemoryRegisterSpace(thread, true);
 			regs.setValue(0, new RegisterValue(pc, new BigInteger("00404321", 16)));
 		}
 		waitForDomainObject(tb.trace);
@@ -1050,7 +1064,8 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 
 	@Test
 	public void testStackPCChangedTracks() throws Exception {
-		assertEquals(trackPc, memBytesProvider.actionTrackLocation.getCurrentUserData());
+		assertEquals(PCLocationTrackingSpec.INSTANCE,
+			memBytesProvider.actionTrackLocation.getCurrentUserData());
 
 		createAndOpenTrace();
 		DBTraceStackManager sm = tb.trace.getStackManager();
@@ -1093,20 +1108,24 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 		mb.testProcess1.addRegion("exe:.text", mb.rng(0x55550000, 0x5555ffff), "rx");
 		waitFor(() -> !trace.getMemoryManager().getAllRegions().isEmpty());
 
-		goToDyn(addr(trace, 0x55550800));
-		performAction(actionEdit);
-		triggerText(memBytesProvider.getByteViewerPanel().getCurrentComponent(), "42");
-		performAction(actionEdit);
-		waitForSwing();
-		waitRecorder(recorder);
-
 		byte[] data = new byte[4];
-		mb.testProcess1.memory.getMemory(mb.addr(0x55550800), data);
-		assertArrayEquals(mb.arr(0x42, 0, 0, 0), data);
+		performAction(actionEdit);
+		waitForPass(noExc(() -> {
+			traceManager.activateTrace(trace);
+			goToDyn(addr(trace, 0x55550800));
+			triggerText(memBytesProvider.getByteViewerPanel().getCurrentComponent(), "42");
+			waitForSwing();
+			waitRecorder(recorder);
+
+			mb.testProcess1.memory.getMemory(mb.addr(0x55550800), data);
+			assertArrayEquals(mb.arr(0x42, 0, 0, 0), data);
+		}));
+
+		performAction(actionEdit);
 	}
 
 	@Test
-	public void testEditTraceBytesWritesNotTarget() throws Exception {
+	public void testEditTraceBytesWritesNotTarget() throws Throwable {
 		createTestModel();
 		mb.createTestProcessesAndThreads();
 
@@ -1120,17 +1139,22 @@ public class DebuggerMemoryBytesProviderTest extends AbstractGhidraHeadedDebugge
 		mb.testProcess1.addRegion("exe:.text", mb.rng(0x55550000, 0x5555ffff), "rx");
 		waitFor(() -> !trace.getMemoryManager().getAllRegions().isEmpty());
 
-		goToDyn(addr(trace, 0x55550800));
-		performAction(actionEdit);
-		triggerText(memBytesProvider.getByteViewerPanel().getCurrentComponent(), "42");
-		performAction(actionEdit);
-
 		byte[] data = new byte[4];
-		AddressSpace space = trace.getBaseAddressFactory().getDefaultAddressSpace();
-		trace.getMemoryManager()
-				.getBytes(traceManager.getCurrentSnap(), space.getAddress(0x55550800),
-					ByteBuffer.wrap(data));
-		assertArrayEquals(mb.arr(0x42, 0, 0, 0), data);
+		performAction(actionEdit);
+		waitForPass(noExc(() -> {
+			traceManager.activateTrace(trace);
+			goToDyn(addr(trace, 0x55550800));
+			triggerText(memBytesProvider.getByteViewerPanel().getCurrentComponent(), "42");
+			waitForSwing();
+			waitRecorder(recorder);
+			trace.getMemoryManager()
+					.getBytes(traceManager.getCurrentSnap(), addr(trace, 0x55550800),
+						ByteBuffer.wrap(data));
+			assertArrayEquals(mb.arr(0x42, 0, 0, 0), data);
+		}));
+		performAction(actionEdit);
+		waitRecorder(recorder);
+
 		// Verify the target was not touched
 		Arrays.fill(data, (byte) 0); // test model uses semisparse array
 		waitForPass(() -> {

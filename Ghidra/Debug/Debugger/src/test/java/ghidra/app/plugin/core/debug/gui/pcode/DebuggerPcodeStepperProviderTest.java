@@ -24,18 +24,20 @@ import org.junit.Test;
 
 import com.google.common.collect.Range;
 
+import generic.Unique;
 import ghidra.app.plugin.assembler.Assembler;
 import ghidra.app.plugin.assembler.Assemblers;
 import ghidra.app.plugin.core.debug.gui.AbstractGhidraHeadedDebuggerGUITest;
 import ghidra.app.plugin.core.debug.gui.listing.DebuggerListingPlugin;
 import ghidra.app.plugin.core.debug.gui.pcode.DebuggerPcodeStepperProvider.PcodeRowHtmlFormatter;
-import ghidra.app.plugin.core.debug.service.emulation.DebuggerTracePcodeEmulator;
+import ghidra.app.plugin.core.debug.service.emulation.DebuggerPcodeMachine;
 import ghidra.app.plugin.core.debug.service.tracemgr.DebuggerTraceManagerServicePlugin;
 import ghidra.app.plugin.processors.sleigh.SleighLanguage;
 import ghidra.app.services.DebuggerEmulationService;
 import ghidra.app.services.DebuggerTraceManagerService;
 import ghidra.pcode.emu.PcodeThread;
 import ghidra.pcode.exec.*;
+import ghidra.pcode.exec.PcodeExecutorStatePiece.Reason;
 import ghidra.pcode.exec.trace.TraceSleighUtils;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Instruction;
@@ -82,12 +84,12 @@ public class DebuggerPcodeStepperProviderTest extends AbstractGhidraHeadedDebugg
 			thread = tb.getOrAddThread("1", 0);
 
 			PcodeExecutor<byte[]> init = TraceSleighUtils.buildByteExecutor(tb.trace, 0, thread, 0);
-			init.executeSleighLine("pc = 0x00400000");
+			init.executeSleigh("pc = 0x00400000;");
 
 			Assembler asm = Assemblers.getAssembler(tb.trace.getFixedProgramView(0));
 			iit = asm.assemble(start,
-				"imm r0, #1234",
-				"imm r1, #2045"); // 11 bits unsigned
+				"imm r0, #0x3d2",
+				"imm r1, #911"); // 10 bits unsigned
 
 		}
 		imm1234 = iit.next();
@@ -96,6 +98,12 @@ public class DebuggerPcodeStepperProviderTest extends AbstractGhidraHeadedDebugg
 
 	protected void assertEmpty() {
 		assertTrue(pcodeProvider.pcodeTableModel.getModelData().isEmpty());
+		assertTrue(pcodeProvider.uniqueTableModel.getModelData().isEmpty());
+	}
+
+	protected void assertDecodeStep() {
+		PcodeRow row = Unique.assertOne(pcodeProvider.pcodeTableModel.getModelData());
+		assertEquals(EnumPcodeRow.DECODE, row);
 		assertTrue(pcodeProvider.uniqueTableModel.getModelData().isEmpty());
 	}
 
@@ -116,7 +124,7 @@ public class DebuggerPcodeStepperProviderTest extends AbstractGhidraHeadedDebugg
 		TraceSchedule schedule1 = TraceSchedule.parse("0:.t0-1");
 		traceManager.openTrace(tb.trace);
 		traceManager.activateThread(thread);
-		assertEmpty();
+		waitForPass(() -> assertDecodeStep());
 
 		traceManager.activateTime(schedule1);
 		waitForPass(() -> assertEquals(schedule1, pcodeProvider.current.getTime()));
@@ -142,10 +150,10 @@ public class DebuggerPcodeStepperProviderTest extends AbstractGhidraHeadedDebugg
 		traceManager.activateTime(schedule2);
 		waitForPass(() -> assertEquals(schedule2, pcodeProvider.current.getTime()));
 
-		DebuggerTracePcodeEmulator emu =
+		DebuggerPcodeMachine<?> emu =
 			waitForValue(() -> emuService.getCachedEmulator(tb.trace, schedule2));
 		assertNotNull(emu);
-		PcodeThread<byte[]> et = emu.getThread(thread.getPath(), false);
+		PcodeThread<?> et = emu.getThread(thread.getPath(), false);
 		waitForPass(() -> assertNull(et.getFrame()));
 
 		/**
@@ -166,12 +174,12 @@ public class DebuggerPcodeStepperProviderTest extends AbstractGhidraHeadedDebugg
 				.anyMatch(r -> r.getCode().contains("emu_swi"))));
 	}
 
-	protected List<PcodeRow> format(List<String> sleigh) {
+	protected List<PcodeRow> format(String sleigh) {
 		SleighLanguage language = (SleighLanguage) getToyBE64Language();
 		PcodeProgram prog = SleighProgramCompiler.compileProgram(language, "test", sleigh,
 			PcodeUseropLibrary.nil());
 		PcodeExecutor<byte[]> executor =
-			new PcodeExecutor<>(language, PcodeArithmetic.BYTES_BE, null);
+			new PcodeExecutor<>(language, BytesPcodeArithmetic.BIG_ENDIAN, null, Reason.INSPECT);
 		PcodeFrame frame = executor.begin(prog);
 		PcodeRowHtmlFormatter formatter = pcodeProvider.new PcodeRowHtmlFormatter(language, frame);
 		return formatter.getRows();
@@ -179,7 +187,7 @@ public class DebuggerPcodeStepperProviderTest extends AbstractGhidraHeadedDebugg
 
 	@Test
 	public void testPcodeFormatterSimple() {
-		List<PcodeRow> rows = format(List.of("r0 = 1;"));
+		List<PcodeRow> rows = format("r0 = 1;");
 		assertEquals(2, rows.size());
 		assertEquals("<html></html>", rows.get(0).getLabel());
 		assertEquals(FallthroughPcodeRow.class, rows.get(1).getClass());
@@ -187,9 +195,10 @@ public class DebuggerPcodeStepperProviderTest extends AbstractGhidraHeadedDebugg
 
 	@Test
 	public void testPcodeFormatterStartsLabel() {
-		List<PcodeRow> rows = format(List.of(
-			"<L0> r0 = 1;",
-			"goto <L0>;"));
+		List<PcodeRow> rows = format("""
+				<L0> r0 = 1;
+				goto <L0>;
+				""");
 		assertEquals(3, rows.size());
 		assertEquals("<html><span class=\"lab\">&lt;0&gt;</span></html>", rows.get(0).getLabel());
 		assertEquals("<html></html>", rows.get(1).getLabel());
@@ -198,10 +207,11 @@ public class DebuggerPcodeStepperProviderTest extends AbstractGhidraHeadedDebugg
 
 	@Test
 	public void testPcodeFormatterMiddleLabel() {
-		List<PcodeRow> rows = format(List.of(
-			"if 1:1 goto <SKIP>;",
-			"r0 = 1;",
-			"<SKIP> r1 = 2;"));
+		List<PcodeRow> rows = format("""
+				if 1:1 goto <SKIP>;
+				r0 = 1;
+				<SKIP> r1 = 2;
+				""");
 		assertEquals(4, rows.size());
 		assertEquals("<html></html>", rows.get(0).getLabel());
 		assertEquals("<html></html>", rows.get(1).getLabel());
@@ -211,10 +221,11 @@ public class DebuggerPcodeStepperProviderTest extends AbstractGhidraHeadedDebugg
 
 	@Test
 	public void testPcodeFormatterFallthroughLabel() {
-		List<PcodeRow> rows = format(List.of(
-			"if 1:1 goto <SKIP>;",
-			"r0 = 1;",
-			"<SKIP>"));
+		List<PcodeRow> rows = format("""
+				if 1:1 goto <SKIP>;
+				r0 = 1;
+				<SKIP>
+				""");
 		assertEquals(3, rows.size());
 		assertEquals("<html></html>", rows.get(0).getLabel());
 		assertEquals("<html></html>", rows.get(1).getLabel());
@@ -224,12 +235,13 @@ public class DebuggerPcodeStepperProviderTest extends AbstractGhidraHeadedDebugg
 
 	@Test
 	public void testPcodeFormatterManyLabel() {
-		List<PcodeRow> rows = format(List.of(
-			"<L0> goto <L1>;",
-			"<L1> goto <L2>;",
-			"<L2> goto <L3>;",
-			"goto <L0>;",
-			"<L3>"));
+		List<PcodeRow> rows = format("""
+				<L0> goto <L1>;
+				<L1> goto <L2>;
+				<L2> goto <L3>;
+				goto <L0>;
+				<L3>
+				""");
 		assertEquals(5, rows.size());
 		// NB. templates number labels in order of appearance in BRANCHes
 		assertEquals("<html><span class=\"lab\">&lt;3&gt;</span></html>", rows.get(0).getLabel());

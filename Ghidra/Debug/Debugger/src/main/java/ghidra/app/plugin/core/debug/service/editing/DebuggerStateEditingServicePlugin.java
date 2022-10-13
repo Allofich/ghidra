@@ -30,13 +30,15 @@ import ghidra.framework.plugintool.annotation.AutoServiceConsumed;
 import ghidra.framework.plugintool.util.PluginStatus;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressRange;
+import ghidra.program.model.lang.Language;
 import ghidra.program.model.lang.Register;
 import ghidra.program.model.mem.*;
 import ghidra.trace.model.Trace;
 import ghidra.trace.model.Trace.TraceProgramViewListener;
+import ghidra.trace.model.guest.TracePlatform;
 import ghidra.trace.model.memory.TraceMemoryOperations;
-import ghidra.trace.model.program.TraceProgramView;
-import ghidra.trace.model.program.TraceProgramViewMemory;
+import ghidra.trace.model.memory.TraceMemorySpace;
+import ghidra.trace.model.program.*;
 import ghidra.trace.model.thread.TraceThread;
 import ghidra.trace.model.time.schedule.PatchStep;
 import ghidra.trace.model.time.schedule.TraceSchedule;
@@ -121,7 +123,8 @@ public class DebuggerStateEditingServicePlugin extends AbstractDebuggerPlugin
 			DebuggerCoordinates coordinates = getCoordinates();
 			Trace trace = coordinates.getTrace();
 
-			switch (getCurrentMode(trace)) {
+			StateEditingMode mode = getCurrentMode(trace);
+			switch (mode) {
 				case READ_ONLY:
 					return CompletableFuture
 							.failedFuture(new MemoryAccessException("Read-only mode"));
@@ -146,30 +149,41 @@ public class DebuggerStateEditingServicePlugin extends AbstractDebuggerPlugin
 				return CompletableFuture
 						.failedFuture(new MemoryAccessException("View is not the present"));
 			}
-			return recorder.writeVariable(coordinates.getThread(), coordinates.getFrame(), address,
-				data);
+			return recorder.writeVariable(coordinates.getPlatform(), coordinates.getThread(),
+				coordinates.getFrame(), address, data);
 		}
 
 		protected CompletableFuture<Void> writeTraceVariable(DebuggerCoordinates coordinates,
-				Address address, byte[] data) {
+				Address guestAddress, byte[] data) {
 			Trace trace = coordinates.getTrace();
+			TracePlatform platform = coordinates.getPlatform();
 			long snap = coordinates.getViewSnap();
+			Address hostAddress = platform.mapGuestToHost(guestAddress);
+			if (hostAddress == null) {
+				throw new IllegalArgumentException(
+					"Guest address " + guestAddress + " is not mapped");
+			}
 			TraceMemoryOperations memOrRegs;
+			Address overlayAddress;
 			try (UndoableTransaction txid =
-				UndoableTransaction.start(trace, "Edit Variable", true)) {
-				if (address.isRegisterAddress()) {
+				UndoableTransaction.start(trace, "Edit Variable")) {
+				if (hostAddress.isRegisterAddress()) {
 					TraceThread thread = coordinates.getThread();
 					if (thread == null) {
 						throw new IllegalArgumentException("Register edits require a thread.");
 					}
-					memOrRegs = trace.getMemoryManager()
+					TraceMemorySpace regs = trace.getMemoryManager()
 							.getMemoryRegisterSpace(thread, coordinates.getFrame(),
 								true);
+					memOrRegs = regs;
+					overlayAddress = regs.getAddressSpace().getOverlayAddress(hostAddress);
 				}
 				else {
 					memOrRegs = trace.getMemoryManager();
+					overlayAddress = hostAddress;
 				}
-				if (memOrRegs.putBytes(snap, address, ByteBuffer.wrap(data)) != data.length) {
+				if (memOrRegs.putBytes(snap, overlayAddress,
+					ByteBuffer.wrap(data)) != data.length) {
 					return CompletableFuture.failedFuture(new MemoryAccessException());
 				}
 			}
@@ -178,16 +192,19 @@ public class DebuggerStateEditingServicePlugin extends AbstractDebuggerPlugin
 
 		protected CompletableFuture<Void> writeEmulatorVariable(DebuggerCoordinates coordinates,
 				Address address, byte[] data) {
+			if (!(coordinates.getView() instanceof TraceVariableSnapProgramView)) {
+				throw new IllegalArgumentException("Cannot emulate using a Fixed Program View");
+			}
 			TraceThread thread = coordinates.getThread();
 			if (thread == null) {
 				// TODO: Well, technically, only for register edits
 				throw new IllegalArgumentException("Emulator edits require a thread.");
 			}
+			Language language = coordinates.getPlatform().getLanguage();
 			TraceSchedule time = coordinates.getTime()
-					.patched(thread, PatchStep.generateSleigh(
-						coordinates.getTrace().getBaseLanguage(), address, data));
+					.patched(thread, language, PatchStep.generateSleigh(language, address, data));
 
-			DebuggerCoordinates withTime = coordinates.withTime(time);
+			DebuggerCoordinates withTime = coordinates.time(time);
 			Long found = traceManager.findSnapshot(withTime);
 			// Materialize it on the same thread (even if swing)
 			// It shouldn't take long, since we're only appending one step.
@@ -195,7 +212,7 @@ public class DebuggerStateEditingServicePlugin extends AbstractDebuggerPlugin
 				// TODO: Could still do it async on another thread, no?
 				// Not sure it buys anything, since program view will call .get on swing thread
 				try {
-					emulationSerivce.emulate(coordinates.getTrace(), time, TaskMonitor.DUMMY);
+					emulationSerivce.emulate(coordinates.getPlatform(), time, TaskMonitor.DUMMY);
 				}
 				catch (CancelledException e) {
 					throw new AssertionError(e);
@@ -237,17 +254,11 @@ public class DebuggerStateEditingServicePlugin extends AbstractDebuggerPlugin
 
 		@Override
 		public DebuggerCoordinates getCoordinates() {
-			DebuggerCoordinates current = traceManager.getCurrentFor(trace);
-			if (current != null) {
-				return current;
+			if (!traceManager.getOpenTraces().contains(trace)) {
+				throw new IllegalStateException(
+					"Trace " + trace + " is not opened in the trace manager.");
 			}
-			DebuggerCoordinates resolved =
-				traceManager.resolveCoordinates(DebuggerCoordinates.trace(trace));
-			if (resolved != null) {
-				return resolved;
-			}
-			throw new IllegalStateException(
-				"Trace " + trace + " is not opened in the trace manager.");
+			return traceManager.resolveTrace(trace);
 		}
 	}
 
@@ -266,7 +277,7 @@ public class DebuggerStateEditingServicePlugin extends AbstractDebuggerPlugin
 
 		@Override
 		public DebuggerCoordinates getCoordinates() {
-			return traceManager.resolveCoordinates(DebuggerCoordinates.view(view));
+			return traceManager.resolveView(view);
 		}
 
 		@Override

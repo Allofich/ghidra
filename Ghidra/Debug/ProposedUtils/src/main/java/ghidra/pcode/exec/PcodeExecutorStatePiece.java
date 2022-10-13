@@ -15,19 +15,39 @@
  */
 package ghidra.pcode.exec;
 
+import ghidra.pcode.exec.PcodeArithmetic.Purpose;
 import ghidra.program.model.address.*;
+import ghidra.program.model.lang.Language;
 import ghidra.program.model.lang.Register;
 import ghidra.program.model.mem.MemBuffer;
 import ghidra.program.model.pcode.Varnode;
 
 /**
  * An interface that provides storage for values of type {@code T}, addressed by offsets of type
- * {@code A}.
+ * {@code A}
+ * 
+ * <p>
+ * The typical pattern for implementing a state is to compose it from one or more state pieces. Each
+ * piece must use the same address type and arithmetic. If more than one piece is needed, they are
+ * composed using {@link PairedPcodeExecutorStatePiece}. Once all the pieces are composed, the root
+ * piece can be wrapped to make a state using {@link DefaultPcodeExecutorState} or
+ * {@link PairedPcodeExecutorState}. The latter corrects the address type to be a pair so it matches
+ * the type of values.
  *
- * @param <A> the type of offsets
+ * @param <A> the type of address offsets
  * @param <T> the type of values
  */
 public interface PcodeExecutorStatePiece<A, T> {
+
+	/**
+	 * Reasons for reading state
+	 */
+	enum Reason {
+		/** The value is needed by the emulator in the course of execution */
+		EXECUTE,
+		/** The value is being inspected */
+		INSPECT
+	}
 
 	/**
 	 * Construct a range, if only to verify the range is valid
@@ -47,17 +67,25 @@ public interface PcodeExecutorStatePiece<A, T> {
 	}
 
 	/**
-	 * Convert the given offset from {@code long} to type {@code A}
+	 * Get the language defining the address spaces of this state piece
 	 * 
-	 * <p>
-	 * Note, is it unlikely (and discouraged) to encode the space in {@code A}. The reason the space
-	 * is given is to ensure the result has the correct size.
-	 * 
-	 * @param space the space where the offset applies
-	 * @param l the offset
-	 * @return the same offset as type {@code A}
+	 * @return the language
 	 */
-	A longToOffset(AddressSpace space, long l);
+	Language getLanguage();
+
+	/**
+	 * Get the arithmetic used to manipulate addresses of the type used by this state
+	 * 
+	 * @return the address (or offset) arithmetic
+	 */
+	PcodeArithmetic<A> getAddressArithmetic();
+
+	/**
+	 * Get the arithmetic used to manipulate values of the type stored by this state
+	 * 
+	 * @return the arithmetic
+	 */
+	PcodeArithmetic<T> getArithmetic();
 
 	/**
 	 * Set the value of a register variable
@@ -87,50 +115,61 @@ public interface PcodeExecutorStatePiece<A, T> {
 	 * @param space the address space
 	 * @param offset the offset within the space
 	 * @param size the size of the variable
-	 * @param truncateAddressableUnit true to truncate to the language's "addressable unit"
+	 * @param quantize true to quantize to the language's "addressable unit"
 	 * @param val the value
 	 */
-	void setVar(AddressSpace space, A offset, int size, boolean truncateAddressableUnit, T val);
+	void setVar(AddressSpace space, A offset, int size, boolean quantize, T val);
 
 	/**
 	 * Set the value of a variable
 	 * 
-	 * <p>
-	 * This method is typically used for writing memory variables.
-	 * 
 	 * @param space the address space
 	 * @param offset the offset within the space
 	 * @param size the size of the variable
-	 * @param truncateAddressableUnit true to truncate to the language's "addressable unit"
+	 * @param quantize true to quantize to the language's "addressable unit"
 	 * @param val the value
 	 */
-	default void setVar(AddressSpace space, long offset, int size, boolean truncateAddressableUnit,
-			T val) {
+	default void setVar(AddressSpace space, long offset, int size, boolean quantize, T val) {
 		checkRange(space, offset, size);
-		setVar(space, longToOffset(space, offset), size, truncateAddressableUnit, val);
+		A aOffset = getAddressArithmetic().fromConst(offset, space.getPointerSize());
+		setVar(space, aOffset, size, quantize, val);
+	}
+
+	/**
+	 * Set the value of a variable
+	 * 
+	 * @param address the address in memory
+	 * @param size the size of the variable
+	 * @param quantize true to quantize to the language's "addressable unit"
+	 * @param val the value
+	 */
+	default void setVar(Address address, int size, boolean quantize, T val) {
+		setVar(address.getAddressSpace(), address.getOffset(), size, quantize, val);
 	}
 
 	/**
 	 * Get the value of a register variable
 	 * 
 	 * @param reg the register
+	 * @param reason the reason for reading the register
 	 * @return the value
 	 */
-	default T getVar(Register reg) {
+	default T getVar(Register reg, Reason reason) {
 		Address address = reg.getAddress();
 		return getVar(address.getAddressSpace(), address.getOffset(), reg.getMinimumByteSize(),
-			true);
+			true, reason);
 	}
 
 	/**
 	 * Get the value of a variable
 	 * 
 	 * @param var the variable
+	 * @param reason the reason for reading the variable
 	 * @return the value
 	 */
-	default T getVar(Varnode var) {
+	default T getVar(Varnode var, Reason reason) {
 		Address address = var.getAddress();
-		return getVar(address.getAddressSpace(), address.getOffset(), var.getSize(), true);
+		return getVar(address.getAddressSpace(), address.getOffset(), var.getSize(), true, reason);
 	}
 
 	/**
@@ -139,10 +178,11 @@ public interface PcodeExecutorStatePiece<A, T> {
 	 * @param space the address space
 	 * @param offset the offset within the space
 	 * @param size the size of the variable
-	 * @param truncateAddressableUnit true to truncate to the language's "addressable unit"
+	 * @param quantize true to quantize to the language's "addressable unit"
+	 * @param reason the reason for reading the variable
 	 * @return the value
 	 */
-	T getVar(AddressSpace space, A offset, int size, boolean truncateAddressableUnit);
+	T getVar(AddressSpace space, A offset, int size, boolean quantize, Reason reason);
 
 	/**
 	 * Get the value of a variable
@@ -153,30 +193,60 @@ public interface PcodeExecutorStatePiece<A, T> {
 	 * @param space the address space
 	 * @param offset the offset within the space
 	 * @param size the size of the variable
-	 * @param truncateAddressableUnit true to truncate to the language's "addressalbe unit"
+	 * @param quantize true to quantize to the language's "addressable unit"
+	 * @param reason the reason for reading the variable
 	 * @return the value
 	 */
-	default T getVar(AddressSpace space, long offset, int size, boolean truncateAddressableUnit) {
+	default T getVar(AddressSpace space, long offset, int size, boolean quantize, Reason reason) {
 		checkRange(space, offset, size);
-		return getVar(space, longToOffset(space, offset), size, truncateAddressableUnit);
+		A aOffset = getAddressArithmetic().fromConst(offset, space.getPointerSize());
+		return getVar(space, aOffset, size, quantize, reason);
+	}
+
+	/**
+	 * Get the value of a variable
+	 * 
+	 * <p>
+	 * This method is typically used for reading memory variables.
+	 * 
+	 * @param address the address of the variable
+	 * @param size the size of the variable
+	 * @param quantize true to quantize to the language's "addressable unit"
+	 * @param reason the reason for reading the variable
+	 * @return the value
+	 */
+	default T getVar(Address address, int size, boolean quantize, Reason reason) {
+		return getVar(address.getAddressSpace(), address.getOffset(), size, quantize, reason);
 	}
 
 	/**
 	 * Bind a buffer of concrete bytes at the given start address
 	 * 
 	 * @param address the start address
+	 * @param purpose the reason why the emulator needs a concrete value
 	 * @return a buffer
 	 */
-	MemBuffer getConcreteBuffer(Address address);
+	MemBuffer getConcreteBuffer(Address address, Purpose purpose);
 
 	/**
-	 * Truncate the given offset to the language's "addressable unit"
+	 * Quantize the given offset to the language's "addressable unit"
 	 * 
 	 * @param space the space where the offset applies
 	 * @param offset the offset
-	 * @return the truncated offset
+	 * @return the quantized offset
 	 */
-	default long truncateOffset(AddressSpace space, long offset) {
+	default long quantizeOffset(AddressSpace space, long offset) {
 		return space.truncateAddressableWordOffset(offset) * space.getAddressableUnitSize();
 	}
+
+	/**
+	 * Erase the entire state or piece
+	 * 
+	 * <p>
+	 * This is generally only useful when the state is itself a cache to another object. This will
+	 * ensure the state is reading from that object rather than a stale cache. If this is not a
+	 * cache, this could in fact clear the whole state, and the machine using it will be left in the
+	 * dark.
+	 */
+	void clear();
 }

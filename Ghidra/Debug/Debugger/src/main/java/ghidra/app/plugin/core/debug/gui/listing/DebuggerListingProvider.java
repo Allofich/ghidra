@@ -201,6 +201,7 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 
 		@Override
 		protected void specChanged(LocationTrackingSpec spec) {
+			updateTitle();
 			trackingSpecChangeListeners.fire.locationTrackingSpecChanged(spec);
 		}
 
@@ -408,7 +409,7 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 	public void readDataState(SaveState saveState) {
 		if (!isMainListing()) {
 			DebuggerCoordinates coordinates =
-				DebuggerCoordinates.readDataState(tool, saveState, KEY_DEBUGGER_COORDINATES, true);
+				DebuggerCoordinates.readDataState(tool, saveState, KEY_DEBUGGER_COORDINATES);
 			coordinatesActivated(coordinates);
 		}
 		super.readDataState(saveState);
@@ -495,7 +496,8 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 		if (markerService != null && markedAddress != null) {
 			trackingMarker = markerService.createPointMarker("Tracked Register",
 				"An address stored by a trace register, mapped to a static program", markedProgram,
-				0, true, true, true, trackingColor, ICON_REGISTER_MARKER, true);
+				MarkerService.HIGHLIGHT_PRIORITY + 1, true, true, true, trackingColor,
+				ICON_REGISTER_MARKER, true);
 			trackingMarker.add(markedAddress);
 		}
 	}
@@ -588,7 +590,7 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 
 	@Override
 	protected void doSetProgram(Program newProgram) {
-		if (newProgram != null && newProgram != current.getView()) {
+		if (newProgram != null && current.getView() != null && newProgram != current.getView()) {
 			throw new AssertionError();
 		}
 		if (getProgram() == newProgram) {
@@ -1040,7 +1042,8 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 			return coordinates;
 		}
 		// Because the view's snap is changing with or without us.... So go with.
-		return current.withTime(coordinates.getTime());
+		// i.e., take the time, but not the thread
+		return current.time(coordinates.getTime());
 	}
 
 	public void goToCoordinates(DebuggerCoordinates coordinates) {
@@ -1055,6 +1058,7 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 		trackingTrait.goToCoordinates(coordinates);
 		readsMemTrait.goToCoordinates(coordinates);
 		locationLabel.goToCoordinates(coordinates);
+		updateTitle();
 		contextChanged();
 	}
 

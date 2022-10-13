@@ -38,10 +38,9 @@ import ghidra.program.model.address.*;
 import ghidra.program.model.data.PointerDataType;
 import ghidra.program.model.lang.Register;
 import ghidra.program.model.util.CodeUnitInsertionException;
-import ghidra.trace.model.Trace;
+import ghidra.trace.model.*;
 import ghidra.trace.model.Trace.TraceMemoryBytesChangeType;
 import ghidra.trace.model.Trace.TraceStackChangeType;
-import ghidra.trace.model.TraceAddressSnapRange;
 import ghidra.trace.model.listing.*;
 import ghidra.trace.model.memory.*;
 import ghidra.trace.model.program.TraceProgramView;
@@ -226,9 +225,8 @@ public class DisassembleAtPcDebuggerBot implements DebuggerBot {
 			}
 			TraceData pcUnit = null;
 			try (UndoableTransaction tid =
-				UndoableTransaction.start(trace, "Disassemble: PC is code pointer", true)) {
-				TraceCodeRegisterSpace regCode =
-					codeManager.getCodeRegisterSpace(thread, frameLevel, true);
+				UndoableTransaction.start(trace, "Disassemble: PC is code pointer")) {
+				TraceCodeSpace regCode = codeManager.getCodeRegisterSpace(thread, frameLevel, true);
 				try {
 					pcUnit = regCode.definedData()
 							.create(Range.atLeast(pcSnap), pc, PointerDataType.dataType);

@@ -23,8 +23,6 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
 import org.junit.*;
 
 import com.google.common.collect.Range;
@@ -42,12 +40,10 @@ import ghidra.program.model.listing.*;
 import ghidra.program.model.scalar.Scalar;
 import ghidra.program.model.symbol.*;
 import ghidra.program.model.util.CodeUnitInsertionException;
-import ghidra.program.model.util.TypeMismatchException;
 import ghidra.test.AbstractGhidraHeadlessIntegrationTest;
 import ghidra.trace.database.ToyDBTraceBuilder;
 import ghidra.trace.database.listing.DBTraceCommentAdapter.DBTraceCommentEntry;
 import ghidra.trace.database.map.DBTraceAddressSnapRangePropertyMapTree.TraceAddressSnapRangeQuery;
-import ghidra.trace.database.memory.DBTraceMemoryRegisterSpace;
 import ghidra.trace.database.memory.DBTraceMemorySpace;
 import ghidra.trace.database.symbol.DBTraceReference;
 import ghidra.trace.model.guest.TraceGuestPlatform;
@@ -62,7 +58,7 @@ import ghidra.util.*;
 import ghidra.util.database.UndoableTransaction;
 import ghidra.util.exception.DuplicateNameException;
 import ghidra.util.exception.NoValueException;
-import ghidra.util.prop.PropertyVisitor;
+import ghidra.util.map.TypeMismatchException;
 
 public class DBTraceCodeUnitTest extends AbstractGhidraHeadlessIntegrationTest
 		implements Unfinished {
@@ -142,56 +138,6 @@ public class DBTraceCodeUnitTest extends AbstractGhidraHeadlessIntegrationTest
 		@Override
 		public boolean isPrivate() {
 			return false;
-		}
-	}
-
-	protected static class TestPropertyVisitor implements PropertyVisitor {
-		Class<?> type = null;
-		Object val = null;
-
-		Pair<Class<?>, Object> getAndReset() {
-			Pair<Class<?>, Object> ret = new ImmutablePair<>(type, val);
-			type = null;
-			val = null;
-			return ret;
-		}
-
-		boolean isSet() {
-			return type != null;
-		}
-
-		@Override
-		public void visit() {
-			assertNull(type);
-			type = Void.class;
-		}
-
-		@Override
-		public void visit(String value) {
-			assertNull(type);
-			type = String.class;
-			val = value;
-		}
-
-		@Override
-		public void visit(Object value) {
-			assertNull(type);
-			type = Object.class;
-			val = value;
-		}
-
-		@Override
-		public void visit(Saveable value) {
-			assertNull(type);
-			type = Saveable.class;
-			val = value;
-		}
-
-		@Override
-		public void visit(int value) {
-			assertNull(type);
-			type = Integer.class;
-			val = value;
 		}
 	}
 
@@ -409,24 +355,6 @@ public class DBTraceCodeUnitTest extends AbstractGhidraHeadlessIntegrationTest
 		assertEquals(Set.of("myVoid", "myInt", "myString", "mySaveable", "myObject", "myT"),
 			set(i4004.propertyNames()));
 		assertEquals(Set.of(), set(i4006.propertyNames()));
-
-		TestPropertyVisitor visitor = new TestPropertyVisitor();
-
-		i4004.visitProperty(visitor, "noProperty");
-		assertFalse(visitor.isSet());
-		i4004.visitProperty(visitor, "myVoid");
-		assertEquals(new ImmutablePair<>(Void.class, null), visitor.getAndReset());
-		i4006.visitProperty(visitor, "myVoid");
-		assertFalse(visitor.isSet());
-		i4004.visitProperty(visitor, "myInt");
-		assertEquals(new ImmutablePair<>(Integer.class, 0x1234), visitor.getAndReset());
-		i4006.visitProperty(visitor, "myInt");
-		assertFalse(visitor.isSet());
-		i4004.visitProperty(visitor, "myString");
-		assertEquals(new ImmutablePair<>(String.class, "Hello!"), visitor.getAndReset());
-		i4004.visitProperty(visitor, "mySaveable");
-		assertEquals(new ImmutablePair<>(Saveable.class, new TestSaveable(0x5678, "Good bye!")),
-			visitor.getAndReset());
 
 		try (UndoableTransaction tid = b.startTransaction()) {
 			i4004.removeProperty("myVoid");
@@ -712,7 +640,7 @@ public class DBTraceCodeUnitTest extends AbstractGhidraHeadlessIntegrationTest
 			undefined = manager.undefinedData().getAt(0, b.addr(0x4006));
 
 			thread = b.getOrAddThread("Thread 1", 0);
-			DBTraceCodeRegisterSpace regCode = manager.getCodeRegisterSpace(thread, true);
+			DBTraceCodeSpace regCode = manager.getCodeRegisterSpace(thread, true);
 			data = regCode.definedData()
 					.create(Range.atLeast(0L), b.language.getRegister("r4"),
 						LongDataType.dataType);
@@ -796,11 +724,11 @@ public class DBTraceCodeUnitTest extends AbstractGhidraHeadlessIntegrationTest
 			und = manager.undefinedData().getAt(0, b.data(0x7fff));
 
 			TraceThread thread = b.getOrAddThread("Thread1", 0);
-			DBTraceMemoryRegisterSpace regMem =
+			DBTraceMemorySpace regMem =
 				b.trace.getMemoryManager().getMemoryRegisterSpace(thread, true);
 			Register r4 = b.language.getRegister("r4");
 			regMem.putBytes(0, r4, b.buf(1, 2, 3, 4, 5, 6, 7, 8));
-			DBTraceCodeRegisterSpace regCode = manager.getCodeRegisterSpace(thread, true);
+			DBTraceCodeSpace regCode = manager.getCodeRegisterSpace(thread, true);
 			reg = regCode.definedData().create(Range.atLeast(0L), r4, PointerDataType.dataType);
 
 			guest = b.trace.getPlatformManager().addGuestPlatform(x86.getDefaultCompilerSpec());
@@ -1442,7 +1370,7 @@ public class DBTraceCodeUnitTest extends AbstractGhidraHeadlessIntegrationTest
 			d4000 = b.addData(0, b.addr(0x4000), myStruct, b.buf(1, 2, 3, 4));
 
 			thread = b.getOrAddThread("Thread 1", 0);
-			DBTraceCodeRegisterSpace regCode = manager.getCodeRegisterSpace(thread, true);
+			DBTraceCodeSpace regCode = manager.getCodeRegisterSpace(thread, true);
 			dR4 = regCode.definedData()
 					.create(Range.atLeast(0L), b.language.getRegister("r4"),
 						myStruct);
