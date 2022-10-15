@@ -10,7 +10,7 @@ jobs:
       - uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '11'
 
       - name: Build Dependencies (Windows)
         run: |
@@ -24,7 +24,7 @@ jobs:
       - name: Build with Gradle
         run: gradle buildGhidra
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: Releases
           path: build/dist/
