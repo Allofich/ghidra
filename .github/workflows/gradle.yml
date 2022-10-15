@@ -9,8 +9,8 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'
-          java-version: '11'
+          distribution: 'microsoft'
+          java-version: '17'
 
       - name: Build Dependencies (Windows)
         run: |
@@ -19,7 +19,7 @@ jobs:
           ren "C:\ProgramData\chocolatey\bin\win_flex.exe" "flex.exe"
 
       - name: Fetch Dependencies
-        run: gradle --init-script gradle/support/fetchDependencies.gradle init
+        run: gradle -I gradle/support/fetchDependencies.gradle init
 
       - name: Build with Gradle
         run: gradle buildGhidra
