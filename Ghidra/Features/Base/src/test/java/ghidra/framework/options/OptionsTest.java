@@ -30,13 +30,13 @@ import javax.swing.KeyStroke;
 import org.jdom.Element;
 import org.junit.*;
 
-import generic.test.AbstractGenericTest;
+import generic.test.AbstractGuiTest;
 import generic.theme.GThemeDefaults.Colors.Palette;
 import ghidra.util.HelpLocation;
 import ghidra.util.bean.opteditor.OptionsVetoException;
 import ghidra.util.exception.InvalidInputException;
 
-public class OptionsTest extends AbstractGenericTest {
+public class OptionsTest extends AbstractGuiTest {
 
 	public enum FRUIT {
 		Apple, Orange, Pear
@@ -246,15 +246,21 @@ public class OptionsTest extends AbstractGenericTest {
 		options.addOptionsChangeListener(listener1);
 		options.addOptionsChangeListener(listener2);
 
-		options.setColor("COLOR", Palette.BLUE);
+		try {
+			options.setColor("COLOR", Palette.BLUE);
+			fail("Expected an OptionsVetoExcepton");
+		}
+		catch (OptionsVetoException e) {
+			// expected
+		}
 
 		assertEquals(Palette.RED, options.getColor("COLOR", Palette.RED));
 
-		if (listener1.callOrder == 1) {
+		if (listener1.callCount == 1) {
 			assertEquals(Palette.RED, listener1.value);
 			assertEquals(null, listener2.value);
 		}
-		if (listener2.callOrder == 1) {
+		if (listener2.callCount == 1) {
 			assertEquals(Palette.RED, listener2.value);
 			assertEquals(null, listener1.value);
 		}
@@ -601,17 +607,17 @@ public class OptionsTest extends AbstractGenericTest {
 	private static class OptionsChangeListenerForTestVeto implements OptionsChangeListener {
 		static int count = 0;
 		private Object value;
-		private int callOrder = -1;
+		private int callCount = -1;
 
 		@Override
 		public void optionsChanged(ToolOptions options, String optionName, Object oldValue,
 				Object newValue) {
 
-			if (callOrder < 0) {
-				callOrder = ++count;
+			if (callCount < 0) {
+				callCount = ++count;
 			}
 
-			if (callOrder > 1) {
+			if (callCount > 1) {
 				throw new OptionsVetoException("Test");
 			}
 
