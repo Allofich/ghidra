@@ -113,7 +113,6 @@ public abstract class PluginTool extends AbstractDockingTool {
 
 	private OptionsChangeListener optionsListener = new ToolOptionsListener();
 	protected ManagePluginsDialog manageDialog;
-	protected ExtensionTableProvider extensionTableProvider;
 
 	protected ToolIconURL iconURL = new ToolIconURL("view_detailed.png");
 
@@ -121,6 +120,7 @@ public abstract class PluginTool extends AbstractDockingTool {
 
 	private boolean isConfigurable = true;
 	protected boolean isDisposed = false;
+	private boolean restoringDataState;
 
 	/**
 	 * Construct a new PluginTool.
@@ -335,11 +335,7 @@ public abstract class PluginTool extends AbstractDockingTool {
 	 * Displays the extensions installation dialog.
 	 */
 	public void showExtensions() {
-		if (extensionTableProvider != null) {
-			extensionTableProvider.close();
-		}
-		extensionTableProvider = new ExtensionTableProvider(this);
-		showDialog(extensionTableProvider);
+		showDialog(new ExtensionTableProvider(this));
 	}
 
 	/**
@@ -574,8 +570,14 @@ public abstract class PluginTool extends AbstractDockingTool {
 	}
 
 	public void restoreDataStateFromXml(Element root) {
-		pluginMgr.restoreDataStateFromXml(root);
-		setConfigChanged(false);
+		restoringDataState = true;
+		try {
+			pluginMgr.restoreDataStateFromXml(root);
+			setConfigChanged(false);
+		}
+		finally {
+			restoringDataState = false;
+		}
 	}
 
 	public Element saveDataStateToXml(boolean savingProject) {
@@ -1500,6 +1502,10 @@ public abstract class PluginTool extends AbstractDockingTool {
 			return;
 		}
 		super.contextChanged(provider);
+	}
+
+	public boolean isRestoringDataState() {
+		return restoringDataState;
 	}
 
 //==================================================================================================

@@ -36,6 +36,7 @@ import ghidra.app.util.bin.format.elf.info.ElfInfoProducer;
 import ghidra.app.util.bin.format.elf.relocation.*;
 import ghidra.app.util.importer.MessageLog;
 import ghidra.framework.options.Options;
+import ghidra.framework.store.LockException;
 import ghidra.program.database.mem.FileBytes;
 import ghidra.program.database.register.AddressRangeObjectMap;
 import ghidra.program.model.address.*;
@@ -45,8 +46,8 @@ import ghidra.program.model.data.DataUtilities.ClearDataMode;
 import ghidra.program.model.lang.Register;
 import ghidra.program.model.listing.*;
 import ghidra.program.model.mem.*;
-import ghidra.program.model.reloc.Relocation;
-import ghidra.program.model.reloc.RelocationTable;
+import ghidra.program.model.reloc.*;
+import ghidra.program.model.reloc.Relocation.Status;
 import ghidra.program.model.scalar.Scalar;
 import ghidra.program.model.symbol.*;
 import ghidra.program.model.util.AddressSetPropertyMap;
@@ -574,41 +575,94 @@ class ElfProgramBuilder extends MemorySectionResolver implements ElfLoadHelper {
 
 		monitor.setMessage("Processing read-only memory changes");
 
-		setReadOnlyMemory(elf.getSection(".data.rel.ro"), null);
-
-		for (ElfProgramHeader roSegment : elf
+		for (ElfProgramHeader relRoHeader : elf
 				.getProgramHeaders(ElfProgramHeaderConstants.PT_GNU_RELRO)) {
-			// TODO: (GP-2730) Identify read-only region which should be transformed
-			setReadOnlyMemory(elf.getProgramLoadHeaderContaining(roSegment.getVirtualAddress()),
-				null);
+
+			long size = relRoHeader.getMemorySize();
+			if (size <= 0) {
+				log("PT_GNU_RELRO has unsupported memory size: " + size);
+				continue;
+			}
+
+			Address startAddr = getSegmentLoadAddress(relRoHeader);
+			if (!startAddr.isLoadedMemoryAddress()) {
+				log("Failed to identify PT_GNU_RELRO memory at address offset " +
+					Long.toHexString(relRoHeader.getVirtualAddress()));
+				continue;
+			}
+
+			Address endAddr = startAddr.add(relRoHeader.getAdjustedMemorySize() - 1);
+			setReadOnlyMemory(new AddressRangeImpl(startAddr, endAddr));
 		}
 	}
 
 	/**
 	 * Transition load segment to read-only
 	 * @param loadedSegment loaded segment
-	 * @param region constrained read-only region or null for entire load segment
 	 */
-	private void setReadOnlyMemory(MemoryLoadable loadedSegment, AddressRange region) {
+	private void setReadOnlyMemory(MemoryLoadable loadedSegment) {
 		if (loadedSegment == null) {
 			return;
 		}
 		List<AddressRange> resolvedLoadAddresses = getResolvedLoadAddresses(loadedSegment);
 		if (resolvedLoadAddresses == null) {
-			// TODO: (GP-2730) PT_LOAD may have been discarded in favor of named section - need to apply
-			// read-only to address range affected by region
+			log("Set read-only failed for: " + loadedSegment + " (please report this issue)");
 			return;
 		}
-		for (AddressRange blockRange : resolvedLoadAddresses) {
-			MemoryBlock block = memory.getBlock(blockRange.getMinAddress());
-			if (block != null) {
-				// TODO: (GP-2730) If sections have been stripped the block should be split-up
-				// based upon the size of the RO region indicated by the roSegment data
-				log("Setting block " + block.getName() +
-					" to read-only based upon PT_GNU_RELRO data");
-				block.setWrite(false);
+		for (AddressRange range : resolvedLoadAddresses) {
+			setReadOnlyMemory(range);
+		}
+	}
+
+	/**
+	 * Transition memory range to read-only
+	 * @param range constrained read-only region or null for entire load segment
+	 */
+	private void setReadOnlyMemory(AddressRange range) {
+		AddressSet set = new AddressSet(range);
+		set = set.intersect(memory.getLoadedAndInitializedAddressSet());
+		if (set.isEmpty()) {
+			log("Ignored attempt to set non-loaded memory as read-only: " + range);
+			return;
+		}
+		try {
+			while (!set.isEmpty()) {
+				AddressRange subrange = set.getFirstRange();
+				Address startAddr = set.getMinAddress();
+				MemoryBlock block = memory.getBlock(startAddr);
+				block = setReadOnlyBlockRange(block, subrange);
+				set.delete(startAddr, block.getEnd());
 			}
 		}
+		catch (MemoryBlockException | LockException | NotFoundException e) {
+			throw new AssertException(e); // unexpected
+		}
+	}
+
+	private MemoryBlock setReadOnlyBlockRange(MemoryBlock block, AddressRange range)
+			throws MemoryBlockException, LockException, NotFoundException {
+		if (!block.isWrite()) {
+			return block;
+		}
+		Address startAddr = block.getStart();
+		boolean split = false;
+		if (!startAddr.equals(block.getStart())) {
+			memory.split(block, startAddr);
+			block = memory.getBlock(startAddr);
+			split = true;
+		}
+		if (!range.contains(block.getEnd())) {
+			memory.split(block, range.getMaxAddress().next());
+			block = memory.getBlock(startAddr);
+			split = true;
+		}
+		String msg = "";
+		if (split) {
+			msg = " (block split was required)";
+		}
+		log("Setting block " + block.getName() + " to read-only" + msg);
+		block.setWrite(false);
+		return block;
 	}
 
 	private void processEntryPoints(TaskMonitor monitor) throws CancelledException {
@@ -938,8 +992,11 @@ class ElfProgramBuilder extends MemorySectionResolver implements ElfLoadHelper {
 				reloc.setType(relrRelocationType);
 			}
 
+			Status status = Status.SKIPPED;
+			int byteLength = 0;
 			try {
 				if (unableToApplyRelocs) {
+					status = Status.FAILURE;
 					ElfRelocationHandler.markAsError(program, relocAddr, type, symbolName,
 						"missing symbol table", log);
 					continue;
@@ -954,6 +1011,7 @@ class ElfProgramBuilder extends MemorySectionResolver implements ElfLoadHelper {
 						memory.convertToInitialized(relocBlock, (byte) 0);
 					}
 					catch (Exception e) {
+						status = Status.FAILURE;
 						Msg.error(this,
 							"Unexpected exception while converting block to initialized", e);
 						ElfRelocationHandler.markAsUninitializedMemory(program, relocAddr, type,
@@ -964,15 +1022,19 @@ class ElfProgramBuilder extends MemorySectionResolver implements ElfLoadHelper {
 
 				if (context != null) {
 					if (relrTypeUnknown) {
+						status = Status.UNSUPPORTED;
 						ElfRelocationHandler.markAsUnsupportedRelr(program, relocAddr);
 					}
 					else {
-						context.processRelocation(reloc, relocAddr);
+						RelocationResult result = context.processRelocation(reloc, relocAddr);
+						byteLength = result.byteLength();
+						status = result.status();
 					}
 				}
 			}
 			catch (MemoryAccessException e) {
 				if (type != 0) { // ignore if type 0 which is always NONE (no relocation performed)
+					status = Status.FAILURE;
 					log("Unable to perform relocation: Type = " + type + " (0x" +
 						Long.toHexString(type) + ") at " + relocAddr + " (Symbol = " + symbolName +
 						") - " + getMessage(e));
@@ -981,7 +1043,7 @@ class ElfProgramBuilder extends MemorySectionResolver implements ElfLoadHelper {
 			finally {
 				// Save relocation data - uses original FileBytes
 				program.getRelocationTable()
-						.add(relocAddr, reloc.getType(), values, null, symbolName);
+						.add(relocAddr, status, reloc.getType(), values, byteLength, symbolName);
 			}
 		}
 
@@ -1009,19 +1071,22 @@ class ElfProgramBuilder extends MemorySectionResolver implements ElfLoadHelper {
 	}
 
 	@Override
-	public boolean addFakeRelocTableEntry(Address address, int length) {
+	public boolean addArtificialRelocTableEntry(Address address, int length) {
 		try {
 			Address maxAddr = address.addNoWrap(length - 1);
 			RelocationTable relocationTable = program.getRelocationTable();
 			List<Relocation> relocations = relocationTable.getRelocations(address);
 			if (!relocations.isEmpty()) {
-				return false;
+				Msg.warn(this, "Artificial relocation at " + address +
+					" conflicts with a previous relocation");
 			}
 			Address nextRelocAddr = relocationTable.getRelocationAddressAfter(address);
-			if (nextRelocAddr == null || nextRelocAddr.compareTo(maxAddr) > 0) {
-				relocationTable.add(address, 0, new long[0], null, null);
-				return true;
+			if (nextRelocAddr != null && nextRelocAddr.compareTo(maxAddr) <= 0) {
+				Msg.warn(this,
+					"Artificial relocation at " + address + " overlaps a previous relocation");
 			}
+			relocationTable.add(address, Status.APPLIED_OTHER, 0, null, length, null);
+			return true;
 		}
 		catch (AddressOverflowException e) {
 			Msg.error(this, "Failed to generate fake relocation data at " + address, e);
