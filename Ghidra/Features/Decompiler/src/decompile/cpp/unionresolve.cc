@@ -16,6 +16,8 @@
 #include "unionresolve.hh"
 #include "funcdata.hh"
 
+namespace ghidra {
+
 /// The original parent must either be a union, a pointer to a union, or a partial union.
 /// The object is set up initially to resolve to the parent.
 /// \param parent is the original parent data-type
@@ -476,6 +478,7 @@ void ScoreUnionFields::scoreTrialDown(const Trial &trial,bool lastLevel)
     case CPUI_INT_AND:
     case CPUI_INT_OR:
     case CPUI_POPCOUNT:
+    case CPUI_LZCOUNT:
       if (meta == TYPE_ARRAY || meta == TYPE_STRUCT || meta == TYPE_UNION || meta == TYPE_CODE || meta == TYPE_FLOAT)
 	score = -5;
       else if (meta == TYPE_PTR || meta == TYPE_BOOL)
@@ -717,6 +720,7 @@ void ScoreUnionFields::scoreTrialUp(const Trial &trial,bool lastLevel)
     case CPUI_INT_AND:
     case CPUI_INT_OR:
     case CPUI_POPCOUNT:
+    case CPUI_LZCOUNT:
       if (meta == TYPE_ARRAY || meta == TYPE_STRUCT || meta == TYPE_UNION || meta == TYPE_CODE || meta == TYPE_FLOAT)
 	score = -5;
       else if (meta == TYPE_PTR || meta == TYPE_BOOL)
@@ -1104,3 +1108,4 @@ ScoreUnionFields::ScoreUnionFields(TypeFactory &tgrp,TypeUnion *unionType,int4 o
   computeBestIndex();
 }
 
+} // End namespace ghidra

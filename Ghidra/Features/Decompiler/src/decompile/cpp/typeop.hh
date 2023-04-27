@@ -16,13 +16,15 @@
 /// \file typeop.hh
 /// \brief Data-type and behavior information associated with specific p-code op-codes.
 
-#ifndef __CPUI_TYPEOP__
-#define __CPUI_TYPEOP__
+#ifndef __TYPEOP_HH__
+#define __TYPEOP_HH__
 
 #include "cpool.hh"
 #include "variable.hh"
 #include "opbehavior.hh"
 #include "printlanguage.hh"
+
+namespace ghidra {
 
 class PcodeOp;
 class Translate;
@@ -733,6 +735,7 @@ public:
 class TypeOpPiece : public TypeOpFunc {
 public:
   TypeOpPiece(TypeFactory *t);			///< Constructor
+  virtual Datatype *getInputCast(const PcodeOp *op,int4 slot,const CastStrategy *castStrategy) const;
   virtual Datatype *getOutputToken(const PcodeOp *op,CastStrategy *castStrategy) const;
   virtual string getOperatorName(const PcodeOp *op) const;
   virtual void push(PrintLanguage *lng,const PcodeOp *op,const PcodeOp *readOp) const { lng->opPiece(op); }
@@ -742,8 +745,7 @@ public:
 class TypeOpSubpiece : public TypeOpFunc {
 public:
   TypeOpSubpiece(TypeFactory *t);			///< Constructor
-  //  virtual Datatype *getOutputLocal(const PcodeOp *op) const;
-  //  virtual Datatype *getInputLocal(const PcodeOp *op,int4 slot) const;
+  virtual Datatype *getInputCast(const PcodeOp *op,int4 slot,const CastStrategy *castStrategy) const;
   virtual Datatype *getOutputToken(const PcodeOp *op,CastStrategy *castStrategy) const;
   virtual Datatype *propagateType(Datatype *alttype,PcodeOp *op,Varnode *invn,Varnode *outvn,
 				  int4 inslot,int4 outslot);
@@ -857,4 +859,12 @@ public:
   virtual void push(PrintLanguage *lng,const PcodeOp *op,const PcodeOp *readOp) const { lng->opPopcountOp(op); }
 };
 
+/// \brief Information about the LZCOUNT op-code
+class TypeOpLzcount : public TypeOpFunc {
+public:
+  TypeOpLzcount(TypeFactory *t);			///< Constructor
+  virtual void push(PrintLanguage *lng,const PcodeOp *op,const PcodeOp *readOp) const { lng->opLzcountOp(op); }
+};
+
+} // End namespace ghidra
 #endif
