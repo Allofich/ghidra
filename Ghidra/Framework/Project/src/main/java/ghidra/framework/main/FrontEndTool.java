@@ -59,8 +59,7 @@ import ghidra.framework.main.logviewer.ui.FileViewer;
 import ghidra.framework.main.logviewer.ui.FileWatcher;
 import ghidra.framework.model.*;
 import ghidra.framework.options.*;
-import ghidra.framework.plugintool.Plugin;
-import ghidra.framework.plugintool.PluginTool;
+import ghidra.framework.plugintool.*;
 import ghidra.framework.plugintool.util.*;
 import ghidra.framework.preferences.Preferences;
 import ghidra.framework.project.tool.GhidraTool;
@@ -131,7 +130,6 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 
 	private WindowListener windowListener;
 	private DockingAction configureToolAction;
-	private PluginClassManager pluginClassManager;
 
 	/**
 	 * Construct a new Ghidra Project Window.
@@ -190,11 +188,8 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 	}
 
 	@Override
-	public PluginClassManager getPluginClassManager() {
-		if (pluginClassManager == null) {
-			pluginClassManager = new PluginClassManager(ApplicationLevelPlugin.class, null);
-		}
-		return pluginClassManager;
+	protected PluginsConfiguration createPluginsConfigurations() {
+		return new ApplicationLevelPluginsConfiguration();
 	}
 
 	public void selectFiles(Set<DomainFile> files) {
@@ -233,7 +228,7 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 	@Override
 	protected boolean doSaveTool() {
 		// This method is overridden to allow the FrontEndTool to perform custom saving.
-		// The super.doSaveTool is designed to save tools to the user's tool chest directory. The 
+		// The super.doSaveTool is designed to save tools to the user's tool chest directory. The
 		// FrontEndTool saves its state directly in the user's settings directory and includes
 		// the entire project's state such as what tools were running and data states for each
 		// running tool.
@@ -397,7 +392,7 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 	}
 
 	@Override
-	public boolean canClose() {
+	protected boolean canClose() {
 		return super.canClose() && plugin.closeActiveProject();
 	}
 
@@ -416,6 +411,7 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 		setProject(project);
 		AppInfo.setActiveProject(project);
 		plugin.setActiveProject(project);
+		firePluginEvent(new ProjectPluginEvent(getClass().getSimpleName(), project));
 	}
 
 	/**
@@ -651,7 +647,7 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 			}
 		};
 		MenuData menuData =
-			new MenuData(new String[] { ToolConstants.MENU_FILE, "Install Extensions..." }, null,
+			new MenuData(new String[] { ToolConstants.MENU_FILE, "Install Extensions" }, null,
 				CONFIGURE_GROUP);
 		menuData.setMenuSubGroup(CONFIGURE_GROUP + 2);
 		installExtensionsAction.setMenuBarData(menuData);
@@ -678,7 +674,7 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 			}
 		};
 
-		MenuData menuData = new MenuData(new String[] { ToolConstants.MENU_FILE, "Configure..." },
+		MenuData menuData = new MenuData(new String[] { ToolConstants.MENU_FILE, "Configure" },
 			null, CONFIGURE_GROUP);
 		menuData.setMenuSubGroup(CONFIGURE_GROUP + 1);
 		configureToolAction.setMenuBarData(menuData);
