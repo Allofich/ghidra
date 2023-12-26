@@ -29,9 +29,9 @@ import docking.widgets.tree.GTreeNode;
 import docking.widgets.tree.support.GTreeRenderer;
 import docking.widgets.tree.support.GTreeSelectionEvent.EventOrigin;
 import docking.widgets.tree.support.GTreeSelectionListener;
-import ghidra.app.plugin.core.debug.DebuggerCoordinates;
 import ghidra.app.plugin.core.debug.gui.DebuggerResources;
 import ghidra.app.plugin.core.debug.gui.model.ObjectTreeModel.AbstractNode;
+import ghidra.debug.api.tracemgr.DebuggerCoordinates;
 import ghidra.trace.model.Lifespan;
 import ghidra.trace.model.Trace;
 import ghidra.trace.model.target.*;
@@ -153,7 +153,7 @@ public class ObjectsTreePanel extends JPanel {
 			if (limitToSnap) {
 				treeModel.setSpan(Lifespan.at(current.getSnap()));
 			}
-			tree.filterChanged();
+			//tree.filterChanged();
 			// Repaint for bold current path is already going to happen
 		}
 	}
@@ -298,7 +298,6 @@ public class ObjectsTreePanel extends JPanel {
 			tree.expandPath(parentPath);
 		}
 	}
-	
 
 	public void setSelectedObject(TraceObject object) {
 		if (object == null) {

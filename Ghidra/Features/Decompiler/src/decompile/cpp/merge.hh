@@ -49,9 +49,9 @@ class Funcdata;
 /// of the Cover of an address tied Varnode and a PcodeOp in this set, affectsTest() can do
 /// secondary testing of whether the Varnode is actually modified by the PcodeOp.
 class StackAffectingOps : public PcodeOpSet {
-  Funcdata &data;
+  Funcdata &data;		///< The function containing these ops
 public:
-  StackAffectingOps(Funcdata &fd) : data(fd) {}
+  StackAffectingOps(Funcdata &fd) : data(fd) {}	///< Constructor
   virtual void populate(void);
   virtual bool affectsTest(PcodeOp *op,Varnode *vn) const;
 };
@@ -95,12 +95,10 @@ class Merge {
   static bool compareCopyByInVarnode(PcodeOp *op1,PcodeOp *op2);
   static bool shadowedVarnode(const Varnode *vn);
   static void findAllIntoCopies(HighVariable *high,vector<PcodeOp *> &copyIns,bool filterTemps);
-  void collectCovering(vector<Varnode *> &vlist,HighVariable *high,PcodeOp *op);
-  bool collectCorrectable(const vector<Varnode *> &vlist,list<PcodeOp *> &oplist,vector<int4> &slotlist,
-			   PcodeOp *op);
+  void collectInputs(HighVariable *high,vector<PcodeOpNode> &oplist,PcodeOp *op);
   PcodeOp *allocateCopyTrim(Varnode *inVn,const Address &addr,PcodeOp *trimOp);
   void snipReads(Varnode *vn,list<PcodeOp *> &markedop);
-  void snipIndirect(PcodeOp *indop);
+  bool snipOutputInterference(PcodeOp *indop);
   void eliminateIntersect(Varnode *vn,const vector<BlockVarnode> &blocksort);
   void unifyAddress(VarnodeLocSet::const_iterator startiter,VarnodeLocSet::const_iterator enditer);
   void trimOpOutput(PcodeOp *op);

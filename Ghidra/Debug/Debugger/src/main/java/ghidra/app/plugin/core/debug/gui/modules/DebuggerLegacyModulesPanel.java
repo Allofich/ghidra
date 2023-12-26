@@ -29,9 +29,9 @@ import javax.swing.table.TableColumnModel;
 
 import docking.widgets.table.CustomToStringCellRenderer;
 import docking.widgets.table.DefaultEnumeratedColumnTableModel.EnumeratedTableColumn;
-import ghidra.app.plugin.core.debug.DebuggerCoordinates;
 import ghidra.app.plugin.core.debug.gui.DebuggerResources;
 import ghidra.app.plugin.core.debug.utils.DebouncedRowWrappedEnumeratedColumnTableModel;
+import ghidra.debug.api.tracemgr.DebuggerCoordinates;
 import ghidra.framework.model.DomainObject;
 import ghidra.framework.plugintool.PluginTool;
 import ghidra.program.model.address.*;
@@ -93,6 +93,7 @@ public class DebuggerLegacyModulesPanel extends JPanel {
 		MAX("Max Address", Address.class, ModuleRow::getMaxAddress),
 		SHORT_NAME("Name", String.class, ModuleRow::getShortName),
 		NAME("Module Name", String.class, ModuleRow::getName, ModuleRow::setName),
+		MAPPING("Mapping", String.class, ModuleRow::getMapping),
 		LIFESPAN("Lifespan", Lifespan.class, ModuleRow::getLifespan),
 		LENGTH("Length", Long.class, ModuleRow::getLength);
 
@@ -144,9 +145,9 @@ public class DebuggerLegacyModulesPanel extends JPanel {
 			extends DebouncedRowWrappedEnumeratedColumnTableModel< //
 					ModuleTableColumns, ObjectKey, ModuleRow, TraceModule> {
 
-		public ModuleTableModel(PluginTool tool) {
+		public ModuleTableModel(PluginTool tool, DebuggerModulesProvider provider) {
 			super(tool, "Modules", ModuleTableColumns.class, TraceModule::getObjectKey,
-				ModuleRow::new, ModuleRow::getModule);
+				mod -> new ModuleRow(provider, mod), ModuleRow::getModule);
 		}
 
 		@Override
@@ -197,7 +198,7 @@ public class DebuggerLegacyModulesPanel extends JPanel {
 		super(new BorderLayout());
 		this.provider = provider;
 
-		moduleTableModel = new ModuleTableModel(provider.getTool());
+		moduleTableModel = new ModuleTableModel(provider.getTool(), provider);
 		moduleTable = new GhidraTable(moduleTableModel);
 		moduleTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 		add(new JScrollPane(moduleTable));

@@ -15,8 +15,7 @@
  */
 package ghidra.app.plugin.core.debug.gui.model;
 
-import java.awt.BorderLayout;
-import java.awt.KeyboardFocusManager;
+import java.awt.*;
 import java.awt.event.*;
 import java.lang.invoke.MethodHandles;
 import java.util.List;
@@ -31,7 +30,6 @@ import docking.action.ToggleDockingAction;
 import docking.widgets.table.RangeCursorTableHeaderRenderer.SeekListener;
 import docking.widgets.tree.support.GTreeSelectionEvent.EventOrigin;
 import generic.theme.GColor;
-import ghidra.app.plugin.core.debug.DebuggerCoordinates;
 import ghidra.app.plugin.core.debug.DebuggerPluginPackage;
 import ghidra.app.plugin.core.debug.gui.DebuggerResources;
 import ghidra.app.plugin.core.debug.gui.DebuggerResources.*;
@@ -42,6 +40,7 @@ import ghidra.app.plugin.core.debug.gui.model.ObjectTableModel.ValueRow;
 import ghidra.app.plugin.core.debug.gui.model.ObjectTreeModel.AbstractNode;
 import ghidra.app.plugin.core.debug.gui.model.PathTableModel.PathRow;
 import ghidra.app.services.DebuggerTraceManagerService;
+import ghidra.debug.api.tracemgr.DebuggerCoordinates;
 import ghidra.framework.options.SaveState;
 import ghidra.framework.plugintool.AutoConfigState;
 import ghidra.framework.plugintool.AutoService;
@@ -65,7 +64,15 @@ public class DebuggerModelProvider extends ComponentProvider implements Saveable
 
 	private JPanel mainPanel = new JPanel(new BorderLayout());
 
-	protected JTextField pathField;
+	static class MyTextField extends JTextField {
+		// This one can be reflected for testing
+		@Override
+		protected void processEvent(AWTEvent e) {
+			super.processEvent(e);
+		}
+	}
+
+	protected MyTextField pathField;
 	protected JButton goButton;
 	protected ObjectsTreePanel objectsTreePanel;
 	protected ObjectsTablePanel elementsTablePanel;
@@ -150,7 +157,7 @@ public class DebuggerModelProvider extends ComponentProvider implements Saveable
 	}
 
 	protected void buildMainPanel() {
-		pathField = new JTextField();
+		pathField = new MyTextField();
 		pathField.setInputVerifier(new InputVerifier() {
 			@Override
 			public boolean verify(JComponent input) {
@@ -453,7 +460,8 @@ public class DebuggerModelProvider extends ComponentProvider implements Saveable
 		if (parent == null) {
 			return null;
 		}
-		for (TraceObjectValue value : parent.getValues()) {
+		for (TraceObjectValue value : parent.getValues(
+			isLimitToCurrentSnap() ? Lifespan.at(current.getSnap()) : Lifespan.ALL)) {
 			if (Objects.equals(object, value.getValue())) {
 				return value.getCanonicalPath();
 			}
