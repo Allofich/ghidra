@@ -56,7 +56,7 @@ public class MemBlockDBTest extends AbstractGenericTest {
 		txID = handle.startTransaction();
 
 		addressFactory = language.getAddressFactory();
-		AddressMapDB addrMap = (AddressMapDB) program.getAddressMap();
+		AddressMapDB addrMap = program.getAddressMap();
 		Lock lock = new Lock("Test");
 		int openMode = DBConstants.CREATE;
 		mem = new MemoryMapDB(handle, addrMap, openMode, true, lock);
@@ -92,7 +92,7 @@ public class MemBlockDBTest extends AbstractGenericTest {
 		assertEquals(false, block.isMapped());
 		assertNull(block.getComment());
 		assertNull(block.getSourceName());
-		assertEquals(MemoryBlock.READ, block.getPermissions());
+		assertEquals(MemoryBlock.READ, block.getFlags());
 
 		List<MemoryBlockSourceInfo> sourceInfos = block.getSourceInfos();
 
@@ -192,7 +192,7 @@ public class MemBlockDBTest extends AbstractGenericTest {
 		assertEquals(true, block.isMapped());
 		assertNull(block.getComment());
 		assertNull(block.getSourceName());
-		assertEquals(MemoryBlock.READ, block.getPermissions());
+		assertEquals(MemoryBlock.READ, block.getFlags());
 
 		List<MemoryBlockSourceInfo> sourceInfos = block.getSourceInfos();
 
@@ -228,7 +228,7 @@ public class MemBlockDBTest extends AbstractGenericTest {
 		assertEquals(true, block.isMapped());
 		assertNull(block.getComment());
 		assertNull(block.getSourceName());
-		assertEquals(MemoryBlock.READ, block.getPermissions());
+		assertEquals(MemoryBlock.READ, block.getFlags());
 
 		List<MemoryBlockSourceInfo> sourceInfos = block.getSourceInfos();
 
@@ -264,7 +264,7 @@ public class MemBlockDBTest extends AbstractGenericTest {
 		assertEquals(false, block.isMapped());
 		assertNull(block.getComment());
 		assertNull(block.getSourceName());
-		assertEquals(MemoryBlock.READ, block.getPermissions());
+		assertEquals(MemoryBlock.READ, block.getFlags());
 
 		List<MemoryBlockSourceInfo> sourceInfos = block.getSourceInfos();
 
@@ -396,7 +396,7 @@ public class MemBlockDBTest extends AbstractGenericTest {
 
 		sourceInfo = sourceInfos.get(1);
 		assertEquals(fileBytes, sourceInfo.getFileBytes().get());
-		assertEquals(70, sourceInfo.getFileBytesOffset());
+		assertEquals(70, sourceInfo.getFileBytesOffset(sourceInfo.getMinAddress()));
 		assertEquals(10, sourceInfo.getLength());
 	}
 

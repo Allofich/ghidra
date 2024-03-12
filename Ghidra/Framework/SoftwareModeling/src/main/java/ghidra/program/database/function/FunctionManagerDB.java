@@ -563,8 +563,8 @@ public class FunctionManagerDB implements FunctionManager {
 	}
 
 	@Override
-	public FunctionIterator getFunctions(Address start, boolean foward) {
-		return new FunctionIteratorDB(start, foward);
+	public FunctionIterator getFunctions(Address start, boolean forward) {
+		return new FunctionIteratorDB(start, forward);
 	}
 
 	@Override
@@ -585,8 +585,8 @@ public class FunctionManagerDB implements FunctionManager {
 	}
 
 	@Override
-	public FunctionIterator getFunctionsNoStubs(Address start, boolean foward) {
-		return new FunctionFilteredIterator(new FunctionIteratorDB(start, foward));
+	public FunctionIterator getFunctionsNoStubs(Address start, boolean forward) {
+		return new FunctionFilteredIterator(new FunctionIteratorDB(start, forward));
 	}
 
 	@Override
@@ -1202,7 +1202,7 @@ public class FunctionManagerDB implements FunctionManager {
 		}
 	}
 
-	public void replaceDataTypes(long oldDataTypeID, long newDataTypeID) {
+	public void replaceDataTypes(Map<Long, Long> dataTypeReplacementMap) {
 		lock.acquire();
 		try {
 			RecordIterator it = adapter.iterateFunctionRecords();
@@ -1213,8 +1213,10 @@ public class FunctionManagerDB implements FunctionManager {
 					continue; // skip thunks
 				}
 
-				if (rec.getLongValue(FunctionAdapter.RETURN_DATA_TYPE_ID_COL) == oldDataTypeID) {
-					rec.setLongValue(FunctionAdapter.RETURN_DATA_TYPE_ID_COL, newDataTypeID);
+				long id = rec.getLongValue(FunctionAdapter.RETURN_DATA_TYPE_ID_COL);
+				Long replacementId = dataTypeReplacementMap.get(id);
+				if (replacementId != null) {
+					rec.setLongValue(FunctionAdapter.RETURN_DATA_TYPE_ID_COL, replacementId);
 					adapter.updateFunctionRecord(rec);
 					FunctionDB functionDB = cache.get(rec);
 					if (functionDB == null) {

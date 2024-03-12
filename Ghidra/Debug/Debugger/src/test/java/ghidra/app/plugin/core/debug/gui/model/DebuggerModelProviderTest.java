@@ -19,14 +19,15 @@ import static org.junit.Assert.*;
 
 import java.awt.event.MouseEvent;
 import java.util.*;
-import java.util.stream.Collectors;
+import java.util.stream.*;
 
 import org.jdom.JDOMException;
 import org.junit.*;
 
 import db.Transaction;
-import docking.widgets.table.DynamicTableColumn;
-import docking.widgets.table.GDynamicColumnTableModel;
+import docking.ActionContext;
+import docking.widgets.table.*;
+import docking.widgets.table.ColumnSortState.SortDirection;
 import docking.widgets.tree.GTree;
 import docking.widgets.tree.GTreeNode;
 import docking.widgets.tree.support.GTreeSelectionEvent.EventOrigin;
@@ -36,7 +37,7 @@ import ghidra.app.plugin.core.debug.gui.model.ObjectTableModel.PrimitiveRow;
 import ghidra.app.plugin.core.debug.gui.model.ObjectTableModel.ValueRow;
 import ghidra.app.plugin.core.debug.gui.model.ObjectTreeModel.AbstractNode;
 import ghidra.app.plugin.core.debug.gui.model.PathTableModel.PathRow;
-import ghidra.app.plugin.core.debug.gui.model.columns.TraceValueValColumn;
+import ghidra.app.plugin.core.debug.gui.model.columns.*;
 import ghidra.dbg.target.TargetEventScope;
 import ghidra.dbg.target.TargetObject;
 import ghidra.dbg.target.schema.SchemaContext;
@@ -51,7 +52,7 @@ import ghidra.trace.model.thread.TraceThread;
 
 public class DebuggerModelProviderTest extends AbstractGhidraHeadedDebuggerTest {
 
-	protected static final SchemaContext CTX;
+	public static final SchemaContext CTX;
 
 	static {
 		try {
@@ -364,9 +365,17 @@ public class DebuggerModelProviderTest extends AbstractGhidraHeadedDebuggerTest 
 		modelProvider.setPath(TraceObjectKeyPath.parse("Processes[0].Handles"));
 		waitForTasks();
 
+		int keyColIndex =
+			waitForValue(() -> findColumnOfClass(modelProvider.elementsTablePanel.tableModel,
+				TraceValueKeyColumn.class));
 		int valColIndex =
 			waitForValue(() -> findColumnOfClass(modelProvider.elementsTablePanel.tableModel,
 				TraceValueValColumn.class));
+
+		TableSortStateEditor sortEditor = new TableSortStateEditor();
+		sortEditor.addSortedColumn(keyColIndex, SortDirection.ASCENDING);
+		modelProvider.elementsTablePanel.tableModel
+				.setTableSortState(sortEditor.createTableSortState());
 
 		waitForPass(() -> {
 			for (int i = 0; i < 10; i++) {
@@ -411,7 +420,9 @@ public class DebuggerModelProviderTest extends AbstractGhidraHeadedDebuggerTest 
 		GTree tree = modelProvider.objectsTreePanel.tree;
 		GTreeNode node = waitForPass(() -> {
 			GTreeNode n = Unique.assertOne(tree.getSelectedNodes());
-			assertEquals("Processes@0", n.getName());
+			assertEquals(
+				"Processes@%d".formatted(System.identityHashCode(processes.getCanonicalParent(0))),
+				n.getName());
 			return n;
 		});
 		clickTreeNode(tree, node, MouseEvent.BUTTON1);
@@ -631,8 +642,10 @@ public class DebuggerModelProviderTest extends AbstractGhidraHeadedDebuggerTest 
 		selectAttribute("_next");
 		waitForSwing();
 
-		assertEnabled(modelProvider, modelProvider.actionFollowLink);
-		performAction(modelProvider.actionFollowLink, modelProvider, true);
+		ActionContext ctx =
+			runSwing(() -> modelProvider.attributesTableListener.computeContext(true));
+		assertTrue(runSwing(() -> modelProvider.actionFollowLink.isEnabledForContext(ctx)));
+		performAction(modelProvider.actionFollowLink, ctx, true);
 
 		TraceObjectKeyPath thread3Path = TraceObjectKeyPath.parse("Processes[0].Threads[3]");
 		assertPathIs(thread3Path, 0, 5);
@@ -822,7 +835,7 @@ public class DebuggerModelProviderTest extends AbstractGhidraHeadedDebuggerTest 
 		}
 		waitForTasks();
 
-		waitForPass(() -> assertEquals("<html>Renamed Thread", node.getDisplayText()));
+		waitForPass(() -> assertEquals("<html>Renamed&nbsp;Thread", node.getDisplayText()));
 	}
 
 	@Test
@@ -1055,6 +1068,7 @@ public class DebuggerModelProviderTest extends AbstractGhidraHeadedDebuggerTest 
 		try (Transaction tx = tb.startTransaction()) {
 			threads.setAttribute(Lifespan.nowOn(0), "Current", thread0);
 		}
+		waitForDomainObject(tb.trace);
 		waitForTasks();
 
 		assertEquals(11, node.getChildren().size());
@@ -1126,7 +1140,8 @@ public class DebuggerModelProviderTest extends AbstractGhidraHeadedDebuggerTest 
 		}
 		waitForTasks();
 
-		assertEquals(4, modelProvider.attributesTablePanel.tableModel.getModelData().size());
+		waitForPass(() -> assertEquals(4,
+			modelProvider.attributesTablePanel.tableModel.getModelData().size()));
 	}
 
 	@Test
@@ -1156,6 +1171,77 @@ public class DebuggerModelProviderTest extends AbstractGhidraHeadedDebuggerTest 
 		// TODO: Should I collapse entries that are links to the same object?
 		//   Would use the "Life" column to display span for each included entry.
 		//   Neat, but not sure it's worth it
-		assertEquals(14, modelProvider.elementsTablePanel.tableModel.getModelData().size());
+		waitForPass(() -> assertEquals(14,
+			modelProvider.elementsTablePanel.tableModel.getModelData().size()));
+	}
+
+	protected Stream<DynamicTableColumn<?, ?, ?>> streamColumns(
+			GDynamicColumnTableModel<?, ?> model) {
+		return IntStream.range(0, model.getColumnCount()).mapToObj(model::getColumn);
+	}
+
+	protected <T extends DynamicTableColumn<?, ?, ?>> T findColumnOfType(
+			GDynamicColumnTableModel<?, ?> model, Class<T> type) {
+		return streamColumns(model)
+				.flatMap(c -> type.isInstance(c) ? Stream.of(type.cast(c)) : Stream.of())
+				.findAny()
+				.orElse(null);
+	}
+
+	protected TraceValueLifePlotColumn getPlotColumn() {
+		return findColumnOfType(modelProvider.elementsTablePanel.tableModel,
+			TraceValueLifePlotColumn.class);
+	}
+
+	@Test
+	public void testLifePlotColumnFitsSnapshotsOnActivate() throws Throwable {
+		createTraceAndPopulateObjects();
+
+		traceManager.activateTrace(tb.trace);
+		waitForSwing();
+
+		// NB. The plot adds a margin of 1
+		assertEquals(Lifespan.span(0, 21), getPlotColumn().getFullRange());
+	}
+
+	@Test
+	public void testLifePlotColumnFitsSnapshotsOnAddSnapshot() throws Throwable {
+		createTraceAndPopulateObjects();
+
+		traceManager.activateTrace(tb.trace);
+		waitForSwing();
+
+		try (Transaction tx = tb.startTransaction()) {
+			tb.trace.getTimeManager().getSnapshot(30, true);
+		}
+		waitForDomainObject(tb.trace);
+
+		// NB. The plot adds a margin of 1
+		assertEquals(Lifespan.span(0, 31), getPlotColumn().getFullRange());
+
+		try (Transaction tx = tb.startTransaction()) {
+			tb.trace.getTimeManager().getSnapshot(31, true);
+		}
+		waitForDomainObject(tb.trace);
+
+		assertEquals(Lifespan.span(0, 32), getPlotColumn().getFullRange());
+	}
+
+	@Test
+	public void testLifePlotColumnFitsSnapshotsOnAddSnapshotSupressEvents() throws Throwable {
+		createTraceAndPopulateObjects();
+
+		traceManager.activateTrace(tb.trace);
+		waitForSwing();
+
+		tb.trace.setEventsEnabled(false);
+		try (Transaction tx = tb.startTransaction()) {
+			tb.trace.getTimeManager().getSnapshot(30, true);
+		}
+		tb.trace.setEventsEnabled(true);
+		waitForDomainObject(tb.trace);
+
+		// NB. The plot adds a margin of 1
+		assertEquals(Lifespan.span(0, 31), getPlotColumn().getFullRange());
 	}
 }

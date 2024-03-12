@@ -19,6 +19,7 @@ import static ghidra.app.plugin.core.debug.gui.DebuggerResources.ICON_REGISTER_M
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.datatransfer.DataFlavor;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.lang.invoke.MethodHandles;
@@ -26,8 +27,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import javax.swing.JLabel;
-import javax.swing.JPanel;
+import javax.swing.*;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
@@ -48,7 +48,9 @@ import ghidra.app.nav.ListingPanelContainer;
 import ghidra.app.plugin.core.clipboard.CodeBrowserClipboardProvider;
 import ghidra.app.plugin.core.codebrowser.CodeViewerProvider;
 import ghidra.app.plugin.core.codebrowser.MarkerServiceBackgroundColorModel;
-import ghidra.app.plugin.core.debug.disassemble.TraceDisassembleCommand;
+import ghidra.app.plugin.core.debug.disassemble.CurrentPlatformTraceDisassembleCommand;
+import ghidra.app.plugin.core.debug.disassemble.CurrentPlatformTraceDisassembleCommand.Reqs;
+import ghidra.app.plugin.core.debug.disassemble.DebuggerDisassemblerPlugin;
 import ghidra.app.plugin.core.debug.gui.DebuggerLocationLabel;
 import ghidra.app.plugin.core.debug.gui.DebuggerResources;
 import ghidra.app.plugin.core.debug.gui.DebuggerResources.FollowsCurrentThreadAction;
@@ -60,6 +62,7 @@ import ghidra.app.plugin.core.debug.utils.ProgramURLUtils;
 import ghidra.app.plugin.core.marker.MarkerMarginProvider;
 import ghidra.app.plugin.core.marker.MarkerOverviewProvider;
 import ghidra.app.services.*;
+import ghidra.app.services.DebuggerControlService.ControlModeChangeListener;
 import ghidra.app.services.DebuggerListingService.LocationTrackingSpecChangeListener;
 import ghidra.app.util.viewer.format.FormatManager;
 import ghidra.app.util.viewer.listingpanel.ListingPanel;
@@ -180,10 +183,10 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 			if (codeViewer.isEmpty()) {
 				return;
 			}
-			Swing.runIfSwingOrRunLater(
-				() -> codeViewer.get()
-						.getListingPanel()
-						.scrollTo(new ProgramLocation(program, selection.getMinAddress())));
+			ListingPanel listingPanel = codeViewer.get().getListingPanel();
+			Swing.runIfSwingOrRunLater(() -> {
+				listingPanel.scrollTo(new ProgramLocation(program, selection.getMinAddress()));
+			});
 		}
 
 		@Override
@@ -227,6 +230,8 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 		public ForListingTrackingTrait() {
 			super(DebuggerListingProvider.this.tool, DebuggerListingProvider.this.plugin,
 				DebuggerListingProvider.this);
+
+			getListingPanel().addIndexMapChangeListener(e -> this.doTrack());
 		}
 
 		@Override
@@ -289,7 +294,7 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 	private DebuggerStaticMappingService mappingService;
 	@AutoServiceConsumed
 	private DebuggerConsoleService consoleService;
-	@AutoServiceConsumed
+	//@AutoServiceConsumed via method
 	private DebuggerControlService controlService;
 	@AutoServiceConsumed
 	private ProgramManager programManager;
@@ -350,6 +355,12 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 
 	protected final ForStaticSyncMappingChangeListener mappingChangeListener =
 		new ForStaticSyncMappingChangeListener();
+	private final ControlModeChangeListener controlModeChangeListener = (trace, mode) -> {
+		if (trace == current.getTrace()) {
+			// for Paste action
+			contextChanged();
+		}
+	};
 
 	protected final boolean isMainListing;
 
@@ -432,10 +443,9 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 	 * little conflated, since before the debugger, no one else presented a listing that could claim
 	 * to be "main" except the "connected" one. Here, we treat "connected" to mean that the address
 	 * is synchronized exactly with the other providers. "Main" on the other hand, does not
-	 * necessarily have that property, but it is still <em>not</em> a snapshot. It is the main
-	 * listing presented by this plugin, and so it has certain unique features. Calling
-	 * {@link DebuggerListingPlugin#getProvider()} will return the main dynamic listing, despite it
-	 * not really being "connected."
+	 * necessarily have that property, but it is still <em>not</em> a clone. It is the main listing
+	 * presented by this plugin, and so it has certain unique features. Calling
+	 * {@link DebuggerListingPlugin#getProvider()} will return the main dynamic listing.
 	 * 
 	 * @return true if this is the main listing for the plugin.
 	 */
@@ -595,6 +605,17 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 	}
 
 	@AutoServiceConsumed
+	private void setControlService(DebuggerControlService controlService) {
+		if (this.controlService != null) {
+			this.controlService.removeModeChangeListener(controlModeChangeListener);
+		}
+		this.controlService = controlService;
+		if (this.controlService != null) {
+			this.controlService.addModeChangeListener(controlModeChangeListener);
+		}
+	}
+
+	@AutoServiceConsumed
 	private void setConsoleService(DebuggerConsoleService consoleService) {
 		if (consoleService != null) {
 			if (actionOpenProgram != null) {
@@ -723,6 +744,14 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 	}
 
 	@Override
+	public Icon getIcon() {
+		if (isMainListing()) {
+			return getBaseIcon();
+		}
+		return super.getIcon();
+	}
+
+	@Override
 	protected ListingActionContext newListingActionContext() {
 		return new DebuggerListingActionContext(this);
 	}
@@ -736,6 +765,21 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 					return false;
 				}
 				return context.getComponentProvider() == componentProvider;
+			}
+
+			@Override
+			public boolean canPaste(DataFlavor[] availableFlavors) {
+				if (controlService == null) {
+					return false;
+				}
+				Trace trace = current.getTrace();
+				if (trace == null) {
+					return false;
+				}
+				if (!controlService.getCurrentMode(trace).canEdit(current)) {
+					return false;
+				}
+				return super.canPaste(availableFlavors);
 			}
 		};
 	}
@@ -881,6 +925,14 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 		if (trigger == EventTrigger.GUI_ACTION) {
 			doCheckCurrentModuleMissing();
 		}
+	}
+
+	@Override
+	public ActionContext getActionContext(MouseEvent event) {
+		if (event == null || event.getSource() != locationLabel) {
+			return super.getActionContext(event);
+		}
+		return locationLabel.getActionContext(this, event);
 	}
 
 	@Override
@@ -1158,24 +1210,22 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 	}
 
 	protected void doGoToTracked() {
-		ProgramLocation loc = trackingTrait.getTrackedLocation();
-		ProgramLocation trackedStatic = doMarkTrackedLocation();
-		if (loc == null) {
-			return;
-		}
-		TraceProgramView curView = current.getView();
-		if (!syncTrait.isAutoSyncCursorWithStaticListing() || trackedStatic == null) {
-			Swing.runIfSwingOrRunLater(() -> {
+		Swing.runIfSwingOrRunLater(() -> {
+			ProgramLocation loc = trackingTrait.getTrackedLocation();
+			ProgramLocation trackedStatic = doMarkTrackedLocation();
+			if (loc == null) {
+				return;
+			}
+			TraceProgramView curView = current.getView();
+			if (!syncTrait.isAutoSyncCursorWithStaticListing() || trackedStatic == null) {
 				if (curView != current.getView()) {
 					// Trace changed before Swing scheduled us
 					return;
 				}
 				goToAndUpdateTrackingLabel(curView, loc);
 				doCheckCurrentModuleMissing();
-			});
-		}
-		else {
-			Swing.runIfSwingOrRunLater(() -> {
+			}
+			else {
 				if (curView != current.getView()) {
 					// Trace changed before Swing scheduled us
 					return;
@@ -1183,8 +1233,8 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 				goToAndUpdateTrackingLabel(curView, loc);
 				doCheckCurrentModuleMissing();
 				plugin.fireStaticLocationEvent(trackedStatic);
-			});
-		}
+			}
+		});
 	}
 
 	protected void doAutoDisassemble(Address start) {
@@ -1201,10 +1251,17 @@ public class DebuggerListingProvider extends CodeViewerProvider {
 		if (exists != null) {
 			return;
 		}
-		AddressSpace space = start.getAddressSpace();
-		AddressSet set = new AddressSet(space.getMinAddress(), space.getMaxAddress());
-		TraceDisassembleCommand dis =
-			new TraceDisassembleCommand(current.getPlatform(), start, set);
+		AddressSetView set = DebuggerDisassemblerPlugin.computeAutoDisassembleAddresses(start,
+			current.getTrace(), current.getViewSnap());
+		if (set == null) {
+			return;
+		}
+		Reqs reqs = Reqs.fromView(tool, view);
+		if (reqs == null) {
+			return;
+		}
+		CurrentPlatformTraceDisassembleCommand dis =
+			new CurrentPlatformTraceDisassembleCommand(tool, set, reqs, start);
 		dis.run(tool, view);
 	}
 
