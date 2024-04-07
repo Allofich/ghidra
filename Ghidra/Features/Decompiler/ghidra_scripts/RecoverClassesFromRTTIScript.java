@@ -66,10 +66,10 @@ import ghidra.app.script.GhidraScript;
 import ghidra.app.services.Analyzer;
 import ghidra.app.services.GraphDisplayBroker;
 import ghidra.app.util.NamespaceUtils;
-import ghidra.app.util.bin.format.dwarf4.next.DWARFFunctionImporter;
-import ghidra.app.util.bin.format.dwarf4.next.DWARFProgram;
-import ghidra.app.util.bin.format.dwarf4.next.sectionprovider.DWARFSectionProvider;
-import ghidra.app.util.bin.format.dwarf4.next.sectionprovider.DWARFSectionProviderFactory;
+import ghidra.app.util.bin.format.dwarf.DWARFFunctionImporter;
+import ghidra.app.util.bin.format.dwarf.DWARFProgram;
+import ghidra.app.util.bin.format.dwarf.sectionprovider.DWARFSectionProvider;
+import ghidra.app.util.bin.format.dwarf.sectionprovider.DWARFSectionProviderFactory;
 import ghidra.app.util.bin.format.pdb.PdbParserConstants;
 import ghidra.app.util.importer.MessageLog;
 import ghidra.app.util.opinion.PeLoader;
@@ -190,10 +190,9 @@ public class RecoverClassesFromRTTIScript extends GhidraScript {
 
 			hasDebugSymbols = isPDBLoadedInProgram();
 			nameVfunctions = !hasDebugSymbols;
-			recoverClassesFromRTTI =
-				new RTTIWindowsClassRecoverer(currentProgram, currentLocation, state.getTool(),
-					this, BOOKMARK_FOUND_FUNCTIONS, USE_SHORT_TEMPLATE_NAMES_IN_STRUCTURE_FIELDS,
-					nameVfunctions, hasDebugSymbols, monitor);
+			recoverClassesFromRTTI = new RTTIWindowsClassRecoverer(currentProgram, state.getTool(),
+				this, BOOKMARK_FOUND_FUNCTIONS, USE_SHORT_TEMPLATE_NAMES_IN_STRUCTURE_FIELDS,
+				nameVfunctions, hasDebugSymbols, monitor);
 		}
 		else if (isPE() && isGcc()) {
 
@@ -213,10 +212,9 @@ public class RecoverClassesFromRTTIScript extends GhidraScript {
 			}
 			//run fixup old elf relocations script
 			runScript("FixElfExternalOffsetDataRelocationScript.java");
-			recoverClassesFromRTTI =
-				new RTTIGccClassRecoverer(currentProgram, currentLocation, state.getTool(), this,
-					BOOKMARK_FOUND_FUNCTIONS, USE_SHORT_TEMPLATE_NAMES_IN_STRUCTURE_FIELDS,
-					nameVfunctions, hasDebugSymbols, monitor);
+			recoverClassesFromRTTI = new RTTIGccClassRecoverer(currentProgram, state.getTool(),
+				this, BOOKMARK_FOUND_FUNCTIONS, USE_SHORT_TEMPLATE_NAMES_IN_STRUCTURE_FIELDS,
+				nameVfunctions, hasDebugSymbols, monitor);
 		}
 		else if (isGcc()) {
 
@@ -245,10 +243,9 @@ public class RecoverClassesFromRTTIScript extends GhidraScript {
 				return;
 			}
 			nameVfunctions = !hasDebugSymbols;
-			recoverClassesFromRTTI =
-				new RTTIGccClassRecoverer(currentProgram, currentLocation, state.getTool(), this,
-					BOOKMARK_FOUND_FUNCTIONS, USE_SHORT_TEMPLATE_NAMES_IN_STRUCTURE_FIELDS,
-					nameVfunctions, hasDebugSymbols, monitor);
+			recoverClassesFromRTTI = new RTTIGccClassRecoverer(currentProgram, state.getTool(),
+				this, BOOKMARK_FOUND_FUNCTIONS, USE_SHORT_TEMPLATE_NAMES_IN_STRUCTURE_FIELDS,
+				nameVfunctions, hasDebugSymbols, monitor);
 		}
 		else {
 			println("This script will not work on this program type");
