@@ -69,7 +69,7 @@ import ghidra.util.exception.CancelledException;
 import ghidra.util.exception.DuplicateFileException;
 
 public class TraceRmiHandler implements TraceRmiConnection {
-	public static final String VERSION = "10.4";
+	public static final String VERSION = "11.1";
 
 	protected static class VersionMismatchError extends TraceRmiError {
 		public VersionMismatchError(String remote) {
@@ -810,6 +810,11 @@ public class TraceRmiHandler implements TraceRmiConnection {
 		}
 		DebuggerCoordinates finalCoords = object == null ? coords : coords.object(object);
 		Swing.runLater(() -> {
+			DebuggerTraceManagerService traceManager = this.traceManager;
+			if (traceManager == null) {
+				// Can happen during tear down.
+				return;
+			}
 			if (!traceManager.getOpenTraces().contains(open.trace)) {
 				traceManager.openTrace(open.trace);
 				traceManager.activate(finalCoords, ActivationCause.SYNC_MODEL);
