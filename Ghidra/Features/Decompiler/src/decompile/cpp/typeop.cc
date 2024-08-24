@@ -4,9 +4,9 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -144,6 +144,35 @@ void TypeOp::selectJavaOperators(vector<TypeOp *> &inst,bool val)
     inst[CPUI_INT_RIGHT]->setMetatypeOut(TYPE_UINT);
     inst[CPUI_INT_RIGHT]->setSymbol(">>");
   }
+}
+
+/// Return CPUI_FLOAT_NEG if the \e sign bit is flipped, or CPUI_FLOAT_ABS if the \e sign bit is zeroed out.
+/// Otherwise CPUI_MAX is returned.
+/// \param op is the given PcodeOp to test
+/// \return the floating-point operation the PcodeOp is equivalent to, or CPUI_MAX
+OpCode TypeOp::floatSignManipulation(PcodeOp *op)
+
+{
+  OpCode opc = op->code();
+  if (opc == CPUI_INT_AND) {
+    Varnode *cvn = op->getIn(1);
+    if (cvn->isConstant()) {
+      uintb val = calc_mask(cvn->getSize());
+      val >>= 1;
+      if (val == cvn->getOffset())
+	return CPUI_FLOAT_ABS;
+    }
+  }
+  else if (opc == CPUI_INT_XOR) {
+    Varnode *cvn = op->getIn(1);
+    if (cvn->isConstant()) {
+      uintb val = calc_mask(cvn->getSize());
+      val = val ^ (val >> 1);
+      if (val == cvn->getOffset())
+	return CPUI_FLOAT_NEG;
+    }
+  }
+  return CPUI_MAX;
 }
 
 /// \param t is the TypeFactory used to construct data-types
@@ -767,42 +796,20 @@ string TypeOpCallother::getOperatorName(const PcodeOp *op) const
 Datatype *TypeOpCallother::getInputLocal(const PcodeOp *op,int4 slot) const
 
 {
-  if (!op->doesSpecialPropagation())
-    return TypeOp::getInputLocal(op,slot);
-  Architecture *glb = tlst->getArch();
-  VolatileWriteOp *vw_op = glb->userops.getVolatileWrite(); // Check if this a volatile write op
-  if ((vw_op->getIndex() == op->getIn(0)->getOffset()) && (slot == 2)) { // And we are requesting slot 2
-    const Address &addr ( op->getIn(1)->getAddr() ); // Address of volatile memory
-    int4 size = op->getIn(2)->getSize(); // Size of memory being written
-    uint4 vflags = 0;
-    SymbolEntry *entry = glb->symboltab->getGlobalScope()->queryProperties(addr,size,op->getAddr(),vflags);
-    if (entry != (SymbolEntry *)0) {
-      Datatype *res = entry->getSizedType(addr,size);
-      if (res != (Datatype *)0)
-	return res;
-    }
-  }
+  UserPcodeOp *userOp = tlst->getArch()->userops.getOp(op->getIn(0)->getOffset());
+  Datatype *res = userOp->getInputLocal(op, slot);
+  if (res != (Datatype *)0)
+    return res;
   return TypeOp::getInputLocal(op,slot);
 }
 
 Datatype *TypeOpCallother::getOutputLocal(const PcodeOp *op) const
 
 {
-  if (!op->doesSpecialPropagation())
-    return TypeOp::getOutputLocal(op);
-  Architecture *glb = tlst->getArch();
-  VolatileReadOp *vr_op = glb->userops.getVolatileRead(); // Check if this a volatile read op
-  if (vr_op->getIndex() == op->getIn(0)->getOffset()) {
-    const Address &addr ( op->getIn(1)->getAddr() ); // Address of volatile memory
-    int4 size = op->getOut()->getSize(); // Size of memory being written
-    uint4 vflags = 0;
-    SymbolEntry *entry = glb->symboltab->getGlobalScope()->queryProperties(addr,size,op->getAddr(),vflags);
-    if (entry != (SymbolEntry *)0) {
-      Datatype *res = entry->getSizedType(addr,size);
-      if (res != (Datatype *)0)
-	return res;
-    }
-  }
+  UserPcodeOp *userOp = tlst->getArch()->userops.getOp(op->getIn(0)->getOffset());
+  Datatype *res = userOp->getOutputLocal(op);
+  if (res != (Datatype *)0)
+    return res;
   return TypeOp::getOutputLocal(op);
 }
 
@@ -1355,7 +1362,12 @@ Datatype *TypeOpIntXor::getOutputToken(const PcodeOp *op,CastStrategy *castStrat
 Datatype *TypeOpIntXor::propagateType(Datatype *alttype,PcodeOp *op,Varnode *invn,Varnode *outvn,
 				      int4 inslot,int4 outslot)
 {
-  if (!alttype->isPowerOfTwo()) return (Datatype *)0; // Only propagate flag enums
+  if (!alttype->isPowerOfTwo()) {
+    if (alttype->getMetatype() != TYPE_FLOAT)
+      return (Datatype *)0;
+    if (floatSignManipulation(op) == CPUI_MAX)
+      return (Datatype *)0;
+  }
   Datatype *newtype;
   if (invn->isSpacebase()) {
     AddrSpace *spc = tlst->getArch()->getDefaultDataSpace();
@@ -1383,7 +1395,12 @@ Datatype *TypeOpIntAnd::getOutputToken(const PcodeOp *op,CastStrategy *castStrat
 Datatype *TypeOpIntAnd::propagateType(Datatype *alttype,PcodeOp *op,Varnode *invn,Varnode *outvn,
 				      int4 inslot,int4 outslot)
 {
-  if (!alttype->isPowerOfTwo()) return (Datatype *)0; // Only propagate flag enums
+  if (!alttype->isPowerOfTwo()) {
+    if (alttype->getMetatype() != TYPE_FLOAT)
+      return (Datatype *)0;
+    if (floatSignManipulation(op) == CPUI_MAX)
+      return (Datatype *)0;
+  }
   Datatype *newtype;
   if (invn->isSpacebase()) {
     AddrSpace *spc = tlst->getArch()->getDefaultDataSpace();

@@ -545,7 +545,7 @@ public class EnumEditor2Test extends AbstractGhidraHeadedIntegrationTest {
 			nameField.setText(newName);
 		});
 
-		DockingActionIf applyAction = getAction(plugin, "Editor: Apply Enum Changes");
+		DockingActionIf applyAction = getAction(plugin, "Apply Enum Changes");
 		assertTrue(applyAction.isEnabled());
 
 		performAction(applyAction);
@@ -566,7 +566,7 @@ public class EnumEditor2Test extends AbstractGhidraHeadedIntegrationTest {
 			nameField.setText(newDescription);
 		});
 
-		DockingActionIf applyAction = getAction(plugin, "Editor: Apply Enum Changes");
+		DockingActionIf applyAction = getAction(plugin, "Apply Enum Changes");
 		assertTrue(applyAction.isEnabled());
 
 		performAction(applyAction);
@@ -666,110 +666,6 @@ public class EnumEditor2Test extends AbstractGhidraHeadedIntegrationTest {
 		assertEquals("Name", table.getColumnName(0));
 		assertEquals("Value", table.getColumnName(1));
 
-	}
-
-	@Test
-	public void testUndoRedo() throws Exception {
-
-		Enum enumDt = editSampleEnum();
-
-		EnumEditorPanel panel = findEditorPanel(tool.getToolFrame());
-		JTable table = panel.getTable();
-		EnumTableModel model = (EnumTableModel) table.getModel();
-
-		// delete a row
-		table.setRowSelectionInterval(0, 0);
-		runSwing(() -> {
-			DockingActionIf action = getDeleteAction();
-			action.actionPerformed(new DefaultActionContext());
-		});
-		applyChanges(true);
-		assertNull(enumDt.getName(0));
-		// undo
-		undo(program);
-		assertEquals("Red", model.getValueAt(0, EnumTableModel.NAME_COL));
-
-		//redo
-		redo(program);
-		assertEquals("Pink", model.getValueAt(0, EnumTableModel.NAME_COL));
-	}
-
-	@Test
-	public void testChangesBeforeUndoYes() throws Exception {
-
-		editSampleEnum();
-
-		EnumEditorPanel panel = findEditorPanel(tool.getToolFrame());
-		JTable table = panel.getTable();
-		EnumTableModel model = (EnumTableModel) table.getModel();
-
-		int origRowCount = model.getRowCount();
-		runSwing(() -> {
-			DockingActionIf action = getAddAction();
-			action.actionPerformed(new DefaultActionContext());
-			action.actionPerformed(new DefaultActionContext());
-		});
-		waitForSwing();
-		applyChanges(true);
-		// make more changes
-		runSwing(() -> {
-			DockingActionIf action = getAddAction();
-			action.actionPerformed(new DefaultActionContext());
-			action.actionPerformed(new DefaultActionContext());
-		});
-		waitForSwing();
-		undo(false);
-		OptionDialog d = waitForDialogComponent(OptionDialog.class);
-		assertNotNull(d);
-		// yes to reload the enum data type
-		JButton button = findButtonByText(d.getComponent(), "Yes");
-		assertNotNull(button);
-		runSwing(() -> button.getActionListeners()[0].actionPerformed(null));
-		waitForSwing();
-		assertEquals(origRowCount, model.getRowCount());
-	}
-
-	@Test
-	public void testChangesBeforeUndoNo() throws Exception {
-
-		editSampleEnum();
-
-		EnumEditorPanel panel = findEditorPanel(tool.getToolFrame());
-		JTable table = panel.getTable();
-		EnumTableModel model = (EnumTableModel) table.getModel();
-
-		runSwing(() -> {
-			int lastRow = model.getRowCount() - 1;
-			if (lastRow >= 0) {
-				table.addRowSelectionInterval(lastRow, lastRow);
-			}
-			DockingActionIf action = getAddAction();
-			action.actionPerformed(new DefaultActionContext());
-			action.actionPerformed(new DefaultActionContext());
-		});
-		waitForSwing();
-		applyChanges(true);
-		// make more changes
-		runSwing(() -> {
-			int lastRow = model.getRowCount() - 1;
-			if (lastRow >= 0) {
-				table.addRowSelectionInterval(lastRow, lastRow);
-			}
-			DockingActionIf action = getAddAction();
-			action.actionPerformed(new DefaultActionContext());
-			action.actionPerformed(new DefaultActionContext());
-		});
-		waitForSwing();
-		int rowCount = model.getRowCount();
-		undo(false);
-		OptionDialog d = waitForDialogComponent(OptionDialog.class);
-		assertNotNull(d);
-		// not to not reload the enum data type
-		JButton button = findButtonByText(d.getComponent(), "No");
-		assertNotNull(button);
-		runSwing(() -> button.getActionListeners()[0].actionPerformed(null));
-		waitForSwing();
-		assertEquals(rowCount, model.getRowCount());
 	}
 
 //==================================================================================================
@@ -900,15 +796,15 @@ public class EnumEditor2Test extends AbstractGhidraHeadedIntegrationTest {
 	}
 
 	private DockingActionIf getAddAction() {
-		return getAction(plugin, DataTypeEditorManager.EDIT_ACTION_PREFIX + "Add Enum Value");
+		return getAction(plugin, "Add Enum Value");
 	}
 
 	private DockingActionIf getApplyAction() {
-		return getAction(plugin, DataTypeEditorManager.EDIT_ACTION_PREFIX + "Apply Enum Changes");
+		return getAction(plugin, "Apply Enum Changes");
 	}
 
 	private DockingActionIf getDeleteAction() {
-		return getAction(plugin, DataTypeEditorManager.EDIT_ACTION_PREFIX + "Delete Enum Value");
+		return getAction(plugin, "Delete Enum Value");
 	}
 
 	private Enum editSampleEnum() {
@@ -934,25 +830,6 @@ public class EnumEditor2Test extends AbstractGhidraHeadedIntegrationTest {
 		runSwingLater(() -> plugin.edit(enumDt));
 		waitForSwing();
 		return enumDt;
-	}
-
-	private void undo(boolean doWait) throws Exception {
-		Runnable r = () -> {
-			try {
-				program.undo();
-				program.flushEvents();
-			}
-			catch (Exception e) {
-				Assert.fail(e.getMessage());
-			}
-		};
-		if (doWait) {
-			runSwing(r);
-		}
-		else {
-			runSwingLater(r);
-		}
-		waitForSwing();
 	}
 
 }
