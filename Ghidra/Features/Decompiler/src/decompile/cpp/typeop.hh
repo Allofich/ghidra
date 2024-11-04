@@ -180,6 +180,7 @@ public:
 
   /// \brief Return the floating-point operation associated with the \e sign bit manipulation by the given PcodeOp
   static OpCode floatSignManipulation(PcodeOp *op);
+  static Datatype *propagateToPointer(TypeFactory *t,Datatype *dt,int4 sz,int4 wordsz);
 };
 
 // Major classes of operations
@@ -695,7 +696,10 @@ public:
 class TypeOpFloatInt2Float : public TypeOpFunc {
 public:
   TypeOpFloatInt2Float(TypeFactory *t,const Translate *trans);			///< Constructor
+  virtual Datatype *getInputCast(const PcodeOp *op,int4 slot,const CastStrategy *castStrategy) const;
   virtual void push(PrintLanguage *lng,const PcodeOp *op,const PcodeOp *readOp) const { lng->opFloatInt2Float(op); }
+  static const PcodeOp *absorbZext(const PcodeOp *op);
+  static int4 preferredZextSize(int4 inSize);
 };
 
 /// \brief Information about the FLOAT_FLOAT2FLOAT op-code
