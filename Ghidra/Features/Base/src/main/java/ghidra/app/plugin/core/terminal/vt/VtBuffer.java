@@ -317,9 +317,12 @@ public class VtBuffer {
 	 */
 	public void moveCursorRight(int n, boolean wrap, boolean isCursorShowing) {
 		if (wrap && curX + n >= cols) {
-			// When wrapping, only use scroll-region-aware scrolling if cursor is
-			// inside the scroll region. If outside (e.g., status bar), just clamp.
-			if (curY >= scrollStart && curY < scrollEnd) {
+			// Decide based on the pre-wrap position whether we are in the scroll region.
+			// If the cursor was inside the scroll region before wrapping, the wrap may
+			// push it past the bottom margin and should trigger scroll-region scrolling.
+			// If outside (e.g., on a fixed status bar line), just clamp to the display.
+			boolean wasInScrollRegion = (curY >= scrollStart && curY < scrollEnd);
+			if (wasInScrollRegion) {
 				checkVerticalScroll();
 			}
 			curX = 0;
@@ -328,10 +331,11 @@ public class VtBuffer {
 			}
 			curY++;
 			bottomY = Math.max(bottomY, curY);
-			if (curY >= scrollStart && curY < scrollEnd) {
-				if (isCursorShowing) {
-					checkVerticalScroll();
-				}
+			if (wasInScrollRegion) {
+				// Always scroll when wrapping within the scroll region, regardless
+				// of cursor visibility. This prevents deferred scrolls from leaking
+				// into subsequent putChar() calls.
+				checkVerticalScroll();
 			}
 			else {
 				// Outside scroll region: clamp to display bounds
