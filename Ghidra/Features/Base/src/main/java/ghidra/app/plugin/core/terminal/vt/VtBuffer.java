@@ -129,7 +129,14 @@ public class VtBuffer {
 		if (c == 0) {
 			return;
 		}
-		checkVerticalScroll();
+		// Only scroll if cursor is completely off-screen (beyond the display).
+		// Do NOT scroll when cursor is outside the scroll region but still within
+		// the display (e.g., on a fixed status bar line). Scroll region scrolling
+		// for line feeds is handled by moveCursorDown() via checkVerticalScroll().
+		while (curY >= rows) {
+			scrollViewportDown(true);
+			curY = Math.max(0, curY - 1);
+		}
 		// At this point, we have no choice but to wrap
 		lines.get(curY).putChar(curX, c, curAttrs);
 	}
@@ -310,13 +317,25 @@ public class VtBuffer {
 	 */
 	public void moveCursorRight(int n, boolean wrap, boolean isCursorShowing) {
 		if (wrap && curX + n >= cols) {
-			checkVerticalScroll();
+			// When wrapping, only use scroll-region-aware scrolling if cursor is
+			// inside the scroll region. If outside (e.g., status bar), just clamp.
+			if (curY >= scrollStart && curY < scrollEnd) {
+				checkVerticalScroll();
+			}
 			curX = 0;
-			lines.get(curY).wrappedToNext = true;
+			if (curY < rows) {
+				lines.get(curY).wrappedToNext = true;
+			}
 			curY++;
 			bottomY = Math.max(bottomY, curY);
-			if (isCursorShowing) {
-				checkVerticalScroll();
+			if (curY >= scrollStart && curY < scrollEnd) {
+				if (isCursorShowing) {
+					checkVerticalScroll();
+				}
+			}
+			else {
+				// Outside scroll region: clamp to display bounds
+				curY = Math.min(curY, rows - 1);
 			}
 		}
 		else {
