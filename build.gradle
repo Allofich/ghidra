@@ -320,6 +320,33 @@ def getCurrentDateTimeLong() {
 }
 
 /*********************************************************************************
+ * Returns true if 'project' has a direct or transitive API project dependency
+ * on the project with path 'targetPath'. The 'targetPath' should be specified
+ * in the form ":<project-name>"
+ *********************************************************************************/
+boolean hasApiProjectDependency(Project project, String targetPath) {
+    def visited = [] as Set
+
+    def walk
+    walk = { Project p ->
+        if (!visited.add(p)) return false
+
+        def apiDeps = p.configurations.api
+            .allDependencies
+            .withType(org.gradle.api.artifacts.ProjectDependency)
+
+        if (apiDeps.any { it.dependencyProject.path == targetPath }) {
+            return true
+        }
+
+        return apiDeps.any { dep -> walk(dep.dependencyProject) }
+    }
+
+    walk(project)
+}
+
+
+/*********************************************************************************
  * Returns a list of all the external library paths declared as dependencies for the 
  *         given project  
  *
