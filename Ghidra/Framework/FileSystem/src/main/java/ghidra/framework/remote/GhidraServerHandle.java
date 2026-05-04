@@ -20,7 +20,7 @@ import java.rmi.RemoteException;
 
 import javax.security.auth.Subject;
 import javax.security.auth.callback.Callback;
-import javax.security.auth.login.LoginException;
+import javax.security.auth.login.FailedLoginException;
 
 /**
  * <code>GhidraServerHandle</code> provides access to a remote server.
@@ -51,7 +51,7 @@ public interface GhidraServerHandle extends Remote {
 	 *         older clients the ability to connect to the server.  Remote interface remained
 	 *         unchanged allowing 9.1 clients to connect to 9.0 server.
 	 *   12: Revised RepositoryFile serialization to facilitate support for text-data used
-	 *       for link-file storage.
+	 *       for link-file storage (12.0).
 	 */
 
 	/**
@@ -99,17 +99,17 @@ public interface GhidraServerHandle extends Remote {
 	 * @param authCallbacks valid authentication callback objects which have been satisfied, or
 	 * null if server does not require authentication.
 	 * @return repository server handle.
-	 * @throws LoginException if user authentication fails
-	 * @throws RemoteException
+	 * @throws FailedLoginException if user authentication fails
+	 * @throws RemoteException failed to create remote handle
 	 * @see #getAuthenticationCallbacks()
 	 */
 	RemoteRepositoryServerHandle getRepositoryServer(Subject user, Callback[] authCallbacks)
-			throws LoginException, RemoteException;
+			throws FailedLoginException, RemoteException;
 
 	/**
 	 * Check server interface compatibility
 	 * @param serverInterfaceVersion client/server interface version
-	 * @throws RemoteException
+	 * @throws RemoteException if requested server interface version not available
 	 * @see #INTERFACE_VERSION
 	 */
 	void checkCompatibility(int serverInterfaceVersion) throws RemoteException;
