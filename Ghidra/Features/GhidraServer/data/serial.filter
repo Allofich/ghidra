@@ -39,6 +39,7 @@ sun.security.x509.X509CertImpl;
 
 java.rmi.server.UID;
 java.rmi.server.ObjID;
+[Ljava.rmi.server.ObjID;
 
 java.rmi.dgc.DGC;
 java.rmi.dgc.Lease;
