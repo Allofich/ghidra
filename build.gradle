@@ -340,6 +340,20 @@ def getCurrentDateTimeLong() {
 }
 
 /*********************************************************************************
+ * Returns the project object from the given projectDependency
+ *********************************************************************************/
+def getDependencyProject(p, projectDependency) {
+    if (projectDependency.hasProperty("path")) {
+        // Supported by Gradle 8.11 and later
+        return p.project(projectDependency.path)
+    }
+    else {
+        // Supported in Gradle 8.5, removed in Gradle 9
+        return projectDependency.dependencyProject
+    }
+}
+
+/*********************************************************************************
  * Returns true if 'project' has a direct or transitive API project dependency
  * on the project with path 'targetPath'. The 'targetPath' should be specified
  * in the form ":<project-name>"
@@ -355,11 +369,11 @@ boolean hasApiProjectDependency(Project project, String targetPath) {
             .allDependencies
             .withType(org.gradle.api.artifacts.ProjectDependency)
 
-        if (apiDeps.any { it.dependencyProject.path == targetPath }) {
+        if (apiDeps.any { getDependencyProject(p, it).path == targetPath }) {
             return true
         }
 
-        return apiDeps.any { dep -> walk(dep.dependencyProject) }
+        return apiDeps.any { walk(getDependencyProject(p, it)) }
     }
 
     walk(project)
