@@ -19,7 +19,7 @@ vulnerabilities in networks and systems.
 This release includes new features, enhancements, performance improvements, quite a few bug fixes,
 and many pull-request contributions. Thanks to all those who have contributed their time, thoughts,
 and code. The Ghidra user community thanks you too!
-	
+
 ### The not-so-fine print: Please Read!
 Ghidra 12.1 is fully backward compatible with project data from previous releases. However, programs
 and data type archives which are created or modified in 12.1 will not be usable by an earlier Ghidra
@@ -43,16 +43,6 @@ libraries and operating systems (e.g., CentOS 7.x) may also run into compatibili
 launching native executables such as the Decompiler and GNU Demangler which may necessitate a 
 rebuild of native components.
 
-**NOTE:** Ghidra Server: The Ghidra 12.1 server is compatible with Ghidra 11.3.2 and later Ghidra
-clients, although the presence of any newer link-files within a repository may not be handled properly
-by client versions prior to 12.0 which lack support for the new storage format.  Ghidra 12.1 clients
-that introduce new link-files into a project will not be able to add such files into version 
-control if connected to older Ghidra Server versions.
-
-**NOTE:** Ghidra Server: Due to potential Java version differences, it is 
-recommended that Ghidra Server installations older than 10.2 be upgraded. Those using 10.2 and newer
-should not need a server upgrade unless they need to work with link-files within a shared repository.
-	
 **NOTE:** Programs imported with a Ghidra beta version or code built directly from source code
 outside of a release tag may not be compatible, and may have flaws that won't be corrected by using
 this new release.  Any programs analyzed from a beta or other local master source build should be
@@ -63,6 +53,30 @@ upgrade mechanisms.  However, there may be improvements or bug fixes in the impo
 process that will provide better results than prior Ghidra versions.  You might consider comparing a
 fresh import of any program you will continue to reverse engineer to see if the latest Ghidra 
 provides better results.
+
+**NOTE:** Ghidra Server: The Ghidra 12.1 server is compatible with older Ghidra 11.3.2 clients and 
+later, although the presence of any newer link-files within a repository may not be handled properly
+by client versions prior to 12.0, which lack support for the newer storage format.  Ghidra 12.1 clients
+require Ghidra Server version 12.1/12.0.5 or newer compatible version. 
+
+**NOTE:** Ghidra Server: Due to security fixes made to Ghidra and the Ghidra Server it is highly
+recommended that older installation versions be updated to this latest release.
+	
+## Security Related Fixes
+
+### RMI Serialization Filter Improvements
+RMI Serialization filters for the Ghidra Server have been tightened and similar filters have been
+added to Ghidra client applications which may communicate with a Ghidra Server.  Please report
+any unexpected *InvalidClassException* errors, which may occur, to the Ghidra team.  If this does occur,
+please check your Ghidra or server application log files for entries which indicate any filter
+rejections which would indicate the name of the offending class.
+
+### Ghidra Server - PKI Authentication Vulnerability
+For those Ghidra Server deployments which utilize PKI Authentication mode (-a2), a logic bug 
+within the authentication callback to the server could allow an attacker to  authenticate as a 
+different user without having access to their private key.  Prior to completing the forged 
+authentication callback, the attacker would still need to successfully complete a fully authenticated 
+TLS connection with the Ghidra Server based on the installed Certificate Authorities (CAs).
 
 ## Bitfields
 The Decompiler now recovers and displays the names of **bitfield** components in structured 
@@ -90,7 +104,7 @@ Where possible, calls to `_objc_msgSend()` and its variations (including `_objc_
 have been overridden to reference the actual target method (if discoverable), which results in a
 much more user-friendly decompilation.
 
-Additionally, a variety of AARCH64 call fixups have been implemented which further clean up 
+Additionally, a variety of AARCH64 call-fixups have been implemented which further clean up 
 decompilation, hiding much of the noise that things like Automatic Reference Counting (ARC) can 
 generate.
 
