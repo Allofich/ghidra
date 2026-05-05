@@ -4,9 +4,9 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -35,23 +35,24 @@ import ghidra.app.plugin.core.navigation.NextPrevAddressPlugin;
 import ghidra.framework.plugintool.PluginTool;
 import ghidra.program.database.ProgramBuilder;
 import ghidra.program.database.ProgramDB;
+import ghidra.program.database.mem.MemoryMapDB;
 import ghidra.program.model.address.*;
-import ghidra.program.util.ProgramLocation;
+import ghidra.program.model.mem.MemoryBlock;
 import ghidra.program.util.ProgramSelection;
 import ghidra.test.*;
+import ghidra.util.task.TaskMonitor;
 
 /**
- * Test class to test SelectBlock
+ * Test class to test the Select Bytes dialog.
  */
-
 public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
+
 	private static final String SELECT_BYTES_BUTTON_NAME = "Select Bytes";
 
 	private TestEnv env;
 	private PluginTool tool;
 	private CodeBrowserPlugin browser;
-	private SelectBlockPlugin plugin;
-	private DockingActionIf action;
+	private DockingActionIf showDialogAction;
 	private ProgramDB program;
 
 	@Before
@@ -63,9 +64,9 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		configureTool(tool);
 
 		browser = env.getPlugin(CodeBrowserPlugin.class);
-		plugin = env.getPlugin(SelectBlockPlugin.class);
+		SelectBlockPlugin plugin = env.getPlugin(SelectBlockPlugin.class);
 
-		action = (DockingActionIf) getInstanceField("toolBarAction", plugin);
+		showDialogAction = (DockingActionIf) getInstanceField("toolBarAction", plugin);
 	}
 
 	@After
@@ -82,25 +83,13 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		waitForSwing();
 	}
 
-	public void open8051Program() throws Exception {
+	private void open8051Program() throws Exception {
 		ProgramBuilder builder = new ProgramBuilder("program2", ProgramBuilder._8051);
 		builder.createMemory("CODE", "CODE:0000", 0x6fff);
 		program = builder.getProgram();
 
 		env.showTool(program);
 		waitForSwing();
-	}
-
-	private void closeProgram() throws Exception {
-		if (program != null) {
-			env.close(program);
-			program = null;
-		}
-	}
-
-	private Address addr(long addr) {
-		AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
-		return space.getAddress(addr);
 	}
 
 	private void configureTool(PluginTool toolToConfigure) throws Exception {
@@ -111,6 +100,311 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		toolToConfigure.addPlugin(SelectBlockPlugin.class.getName());
 	}
 
+	@Test
+	public void testActionEnablement() throws Exception {
+
+		assertFalse(showDialogAction.isEnabledForContext(getContext()));
+		openProgram();
+		assertTrue(showDialogAction.isEnabledForContext(getContext()));
+
+		SelectBlockDialog dialog = showDialog();
+
+		closeProgram();
+		assertTrue(!showDialogAction.isEnabledForContext(getContext()));
+		close(dialog);
+	}
+
+	@Test
+	public void testSelectAll() throws Exception {
+		openProgram();
+		SelectBlockDialog dialog = showDialog();
+
+		pressSelectAll(dialog);
+		pressSelectBytes(dialog);
+
+		ProgramSelection selection = browser.getCurrentSelection();
+		assertEquals(new AddressSet(program.getMemory()), new AddressSet(selection));
+		close(dialog);
+	}
+
+	@Test
+	public void testSelectForward() throws Exception {
+		openProgram();
+		goTo(addr(0x1006420));
+
+		SelectBlockDialog dialog = showDialog();
+
+		pressSelectAll(dialog);
+		assertAddressFieldDisabled(dialog);
+		assertLengthFieldDisabled(dialog);
+
+		pressSelectForward(dialog);
+
+		assertAddressFieldDisabled(dialog);
+		assertLengthFieldEnabled(dialog);
+
+		setLength(dialog, 0x100);
+
+		pressSelectBytes(dialog);
+
+		ProgramSelection selection = browser.getCurrentSelection();
+		assertEquals(new AddressSet(addr(0x1006420), addr(0x100651f)), selection);
+		close(dialog);
+	}
+
+	@Test
+	public void testBadInput() throws Exception {
+		openProgram();
+		goTo(addr(0x1006420));
+
+		SelectBlockDialog dialog = showDialog();
+
+		pressSelectForward(dialog);
+
+		setAddress(dialog, "foo");
+
+		pressSelectBytes(dialog);
+		assertEquals("length must be > 0", dialog.getStatusText());
+		close(dialog);
+	}
+
+	@Test
+	public void testSelectBackward() throws Exception {
+		openProgram();
+		goTo(addr(0x1006420));
+
+		SelectBlockDialog dialog = showDialog();
+
+		pressSelectBackward(dialog);
+
+		setLength(dialog, 0x100);
+
+		pressSelectBytes(dialog);
+
+		ProgramSelection selection = browser.getCurrentSelection();
+		assertEquals(new AddressSet(addr(0x1006321), addr(0x1006420)), selection);
+		close(dialog);
+
+	}
+
+	@Test
+	public void testSelectToAddr() throws Exception {
+		openProgram();
+		goTo(addr(0x1006420));
+
+		SelectBlockDialog dialog = showDialog();
+
+		pressSelectToAddress(dialog);
+
+		setAddress(dialog, "0x1007000");
+
+		pressSelectBytes(dialog);
+		ProgramSelection selection = browser.getCurrentSelection();
+		assertEquals(new AddressSet(addr(0x1006420), addr(0x1006fff)), selection);
+		close(dialog);
+	}
+
+	@Test
+	public void testSelectForward_OverlayBlock() throws Exception {
+
+		openProgram();
+
+		Address start = addr(0x1006420);
+
+		MemoryBlock block = createOverlayBlock(start, 0x100);
+		Address overlayStart = block.getStart();
+		Address overlayEnd = block.getEnd();
+		goTo(overlayStart);
+
+		SelectBlockDialog dialog = showDialog();
+
+		pressSelectForward(dialog);
+
+		setLength(dialog, 0x100);
+
+		pressSelectBytes(dialog);
+
+		ProgramSelection selection = browser.getCurrentSelection();
+		assertEquals(new AddressSet(overlayStart, overlayEnd), selection);
+		close(dialog);
+	}
+
+	@Test
+	public void testSelectForward_OverlayBlock_LengthLargerThanBlock() throws Exception {
+
+		openProgram();
+
+		Address start = addr(0x1006420);
+
+		MemoryBlock block = createOverlayBlock(start, 0x100);
+		Address overlayStart = block.getStart();
+		Address overlayEnd = block.getEnd();
+		goTo(overlayStart);
+
+		SelectBlockDialog dialog = showDialog();
+
+		pressSelectForward(dialog);
+
+		setLength(dialog, 0x101);
+
+		pressSelectBytes(dialog);
+
+		ProgramSelection selection = browser.getCurrentSelection();
+		assertEquals(new AddressSet(overlayStart, overlayEnd), selection);
+		close(dialog);
+	}
+
+	@Test
+	public void testSelectBackward_OverlayBlock() throws Exception {
+
+		openProgram();
+
+		Address start = addr(0x1006420);
+
+		MemoryBlock block = createOverlayBlock(start, 0x100);
+		Address overlayStart = block.getStart();
+		Address overlayEnd = block.getEnd();
+		goTo(overlayEnd);
+
+		SelectBlockDialog dialog = showDialog();
+
+		pressSelectBackward(dialog);
+
+		setLength(dialog, 0x100);
+
+		pressSelectBytes(dialog);
+
+		ProgramSelection selection = browser.getCurrentSelection();
+		assertEquals(new AddressSet(overlayStart, overlayEnd), selection);
+		close(dialog);
+	}
+
+	@Test
+	public void testSelectBackward_OverlayBlock_LengthLargerThanBlock() throws Exception {
+
+		openProgram();
+
+		Address start = addr(0x1006420);
+
+		MemoryBlock block = createOverlayBlock(start, 0x100);
+		Address overlayStart = block.getStart();
+		Address overlayEnd = block.getEnd();
+		goTo(overlayEnd);
+
+		SelectBlockDialog dialog = showDialog();
+
+		pressSelectBackward(dialog);
+
+		setLength(dialog, 0x101);
+
+		pressSelectBytes(dialog);
+
+		ProgramSelection selection = browser.getCurrentSelection();
+		assertEquals(new AddressSet(overlayStart, overlayEnd), selection);
+		close(dialog);
+	}
+
+	@Test
+	public void testSegmentedProgram() throws Exception {
+
+		open8051Program();
+		Address startAddress = addr(0x6420);
+		goTo(startAddress);
+
+		SelectBlockDialog dialog = showDialog();
+
+		pressSelectAll(dialog);
+
+		assertAddressFieldDisabled(dialog);
+		assertLengthFieldDisabled(dialog);
+
+		pressSelectBytes(dialog);
+		ProgramSelection selection = browser.getCurrentSelection();
+		assertEquals(new AddressSet(program.getMemory()), new AddressSet(selection));
+
+		//---------------------------
+
+		clearSelection();
+
+		pressSelectToAddress(dialog);
+
+		assertAddressFieldEnabled(dialog);
+		assertLengthFieldDisabled(dialog);
+
+		setAddress(dialog, "0x6520");
+
+		pressSelectBytes(dialog);
+		selection = browser.getCurrentSelection();
+		assertEquals(new AddressSet(startAddress, addr(0x6520)), selection);
+
+		//---------------------------
+
+		clearSelection();
+
+		pressSelectForward(dialog);
+
+		assertAddressFieldDisabled(dialog);
+		assertLengthFieldEnabled(dialog);
+
+		setLength(dialog, 100);
+
+		pressSelectBytes(dialog);
+		selection = browser.getCurrentSelection();
+		assertEquals(new AddressSet(startAddress, addr(0x6483)), selection);
+
+		//---------------------------
+
+		clearSelection();
+
+		pressSelectBackward(dialog);
+
+		assertAddressFieldDisabled(dialog);
+		assertLengthFieldEnabled(dialog);
+
+		setLength(dialog, 100);
+
+		pressSelectBytes(dialog);
+		selection = browser.getCurrentSelection();
+		assertEquals(new AddressSet(addr(0x63bd), startAddress), selection);
+		close(dialog);
+	}
+
+	@Test
+	public void testCloseProgram() throws Exception {
+		openProgram();
+		closeProgram();
+
+		assertFalse(showDialogAction.isEnabledForContext(getContext()));
+	}
+
+//=================================================================================================
+// Private Methods
+//=================================================================================================	
+
+	private void pressSelectToAddress(SelectBlockDialog dialog) {
+		JRadioButton toButton = (JRadioButton) findComponentByName(dialog, "toButton");
+		pressButton(toButton, true);
+	}
+
+	private SelectBlockDialog showDialog() {
+		performAction(showDialogAction, getContext(), true);
+		SelectBlockDialog dialog = waitForDialogComponent(SelectBlockDialog.class);
+		return dialog;
+	}
+
+	private MemoryBlock createOverlayBlock(Address start, int length) {
+		return tx(program, () -> {
+			MemoryMapDB memory = program.getMemory();
+			return memory.createInitializedBlock("Name", start, length, (byte) 0, TaskMonitor.DUMMY,
+				true);
+		});
+	}
+
+	private Address addr(long addr) {
+		AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
+		return space.getAddress(addr);
+	}
+
 	private ActionContext getContext() {
 		ActionContext context = browser.getProvider().getActionContext(null);
 		if (context == null) {
@@ -119,205 +413,64 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		return context;
 	}
 
-	@Test
-	public void testActionEnablement() throws Exception {
-		assertTrue(!action.isEnabledForContext(getContext()));
-		openProgram();
-		assertTrue(action.isEnabledForContext(getContext()));
-		performAction(action, getContext(), true);
-		assertTrue(action.isEnabledForContext(getContext()));
-		SelectBlockDialog dialog =
-			waitForDialogComponent(tool.getToolFrame(), SelectBlockDialog.class, 1000);
-		assertNotNull(dialog);
-		assertTrue(dialog.isVisible());
-		closeProgram();
-		assertTrue(!action.isEnabledForContext(getContext()));
-		runSwing(() -> dialog.close());
+	private void closeProgram() throws Exception {
+		if (program != null) {
+			env.close(program);
+			program = null;
+		}
 	}
 
-	@Test
-	public void testSelectAll() throws Exception {
-		openProgram();
-		performAction(action, getContext(), true);
-		SelectBlockDialog dialog =
-			waitForDialogComponent(tool.getToolFrame(), SelectBlockDialog.class, 1000);
-		JRadioButton allButton = (JRadioButton) findComponentByName(dialog, "allButton");
-		pressButton(allButton, true);
-		pressSelectBytes(dialog);
-		ProgramSelection currSelection = browser.getCurrentSelection();
-		assertEquals(new AddressSet(program.getMemory()), new AddressSet(currSelection));
-		runSwing(() -> dialog.close());
-	}
-
-	@Test
-	public void testSelectForward() throws Exception {
-		openProgram();
-		browser.goTo(new ProgramLocation(program, addr(0x1006420)));
-		performAction(action, getContext(), true);
-		SelectBlockDialog dialog =
-			waitForDialogComponent(tool.getToolFrame(), SelectBlockDialog.class, 1000);
-		JRadioButton allButton = (JRadioButton) findComponentByName(dialog, "allButton");
-		pressButton(allButton, true);
-
-		JTextField addressInputField = (JTextField) getInstanceField("toAddressField", dialog);
-		assertTrue(!addressInputField.isEnabled());
-
-		final IntegerTextField inputField =
-			(IntegerTextField) getInstanceField("numberInputField", dialog);
-		assertTrue(!inputField.getComponent().isEnabled());
-
-		JRadioButton forwardButton = (JRadioButton) findComponentByName(dialog, "forwardButton");
-		pressButton(forwardButton, true);
-
-		assertTrue(!addressInputField.isEnabled());
-		assertTrue(inputField.getComponent().isEnabled());
-
-		runSwing(() -> inputField.setValue(0x100));
-
-		pressSelectBytes(dialog);
-		ProgramSelection currSelection = browser.getCurrentSelection();
-		assertEquals(new AddressSet(addr(0x1006420), addr(0x100651f)), currSelection);
-		runSwing(() -> dialog.close());
-	}
-
-	@Test
-	public void testBadInput() throws Exception {
-		openProgram();
-		browser.goTo(new ProgramLocation(program, addr(0x1006420)));
-		performAction(action, getContext(), true);
-		SelectBlockDialog dialog =
-			waitForDialogComponent(tool.getToolFrame(), SelectBlockDialog.class, 1000);
-		JRadioButton forwardButton = (JRadioButton) findComponentByName(dialog, "forwardButton");
-		pressButton(forwardButton, true);
-
-		final JTextField addressInputField =
-			(JTextField) getInstanceField("toAddressField", dialog);
-
-		runSwing(() -> addressInputField.setText("foo"));
-		pressSelectBytes(dialog);
-		assertEquals("length must be > 0", dialog.getStatusText());
-		runSwing(() -> dialog.close());
-	}
-
-	@Test
-	public void testSelectBackward() throws Exception {
-		openProgram();
-		browser.goTo(new ProgramLocation(program, addr(0x1006420)));
-		performAction(action, getContext(), true);
-		SelectBlockDialog dialog =
-			waitForDialogComponent(tool.getToolFrame(), SelectBlockDialog.class, 1000);
+	private void pressSelectBackward(SelectBlockDialog dialog) {
 		JRadioButton backwardButton = (JRadioButton) findComponentByName(dialog, "backwardButton");
 		pressButton(backwardButton, true);
-
-		final IntegerTextField inputField =
-			(IntegerTextField) getInstanceField("numberInputField", dialog);
-		runSwing(() -> inputField.setValue(256));
-
-		pressButtonByText(dialog, SELECT_BYTES_BUTTON_NAME, true);
-		ProgramSelection currSelection = browser.getCurrentSelection();
-		assertEquals(new AddressSet(addr(0x1006321), addr(0x1006420)), currSelection);
-		runSwing(() -> dialog.close());
-
 	}
 
-	@Test
-	public void testSelectToAddr() throws Exception {
-		openProgram();
-		browser.goTo(new ProgramLocation(program, addr(0x1006420)));
-		performAction(action, getContext(), true);
-		SelectBlockDialog dialog =
-			waitForDialogComponent(tool.getToolFrame(), SelectBlockDialog.class, 1000);
-		JRadioButton toButton = (JRadioButton) findComponentByName(dialog, "toButton");
-		pressButton(toButton, true);
-
+	private void setAddress(SelectBlockDialog dialog, String text) {
 		final JTextField addressInputField =
 			(JTextField) getInstanceField("toAddressField", dialog);
-		runSwing(() -> addressInputField.setText("0x1007000"));
-		pressSelectBytes(dialog);
-		ProgramSelection currSelection = browser.getCurrentSelection();
-		assertEquals(new AddressSet(addr(0x1006420), addr(0x1006fff)), currSelection);
-		runSwing(() -> dialog.close());
-
+		runSwing(() -> addressInputField.setText(text));
 	}
 
-	@Test
-	public void testSegmentedProgram() throws Exception {
-		// select all
-		open8051Program();
-		Address startAddress = addr(0x6420);
-		browser.goTo(new ProgramLocation(program, startAddress));
-		performAction(action, getContext(), true);
-		SelectBlockDialog dialog =
-			waitForDialogComponent(tool.getToolFrame(), SelectBlockDialog.class, 1000);
-		JRadioButton allButton = (JRadioButton) findComponentByName(dialog, "allButton");
-		pressButton(allButton, true);
-
-		// all input fields disabled
-		final JTextField addressInputField =
-			(JTextField) getInstanceField("toAddressField", dialog);
-		assertTrue(!addressInputField.isEnabled());
-
+	private void setLength(SelectBlockDialog dialog, int length) {
 		IntegerTextField inputField =
 			(IntegerTextField) getInstanceField("numberInputField", dialog);
-		assertTrue(!inputField.getComponent().isEnabled());
-
-		pressSelectBytes(dialog);
-		ProgramSelection currSelection = browser.getCurrentSelection();
-		assertEquals(new AddressSet(program.getMemory()), new AddressSet(currSelection));
-
-		clearSelection();
-
-		// to address
-		JRadioButton toButton = (JRadioButton) findComponentByName(dialog, "toButton");
-		pressButton(toButton, true);
-
-		// only address input field is enabled
-		assertTrue(addressInputField.isEnabled());
-		assertTrue(!inputField.getComponent().isEnabled());
-
-		runSwing(() -> addressInputField.setText("0x6520"));
-		pressSelectBytes(dialog);
-		currSelection = browser.getCurrentSelection();
-		assertEquals(new AddressSet(startAddress, addr(0x6520)), currSelection);
-
-		clearSelection();
-
-		// select forward
-		JRadioButton forwardButton = (JRadioButton) findComponentByName(dialog, "forwardButton");
-		pressButton(forwardButton, true);
-
-		// only address input field is enabled
-		assertTrue(!addressInputField.isEnabled());
-		assertTrue(inputField.getComponent().isEnabled());
-
-		inputField.setValue(100);
-		pressSelectBytes(dialog);
-		currSelection = browser.getCurrentSelection();
-		assertEquals(new AddressSet(startAddress, addr(0x6483)), currSelection);
-
-		clearSelection();
-
-		// select backward
-		JRadioButton backwardButton = (JRadioButton) findComponentByName(dialog, "backwardButton");
-		pressButton(backwardButton, true);
-
-		// only address input field is enabled
-		assertTrue(!addressInputField.isEnabled());
-		assertTrue(inputField.getComponent().isEnabled());
-
-		inputField.setValue(100);
-		pressSelectBytes(dialog);
-		currSelection = browser.getCurrentSelection();
-		assertEquals(new AddressSet(addr(0x63bd), startAddress), currSelection);
-		runSwing(() -> dialog.close());
+		runSwing(() -> inputField.setValue(length));
 	}
 
-	@Test
-	public void testCloseProgram() throws Exception {
-		openProgram();
-		closeProgram();
+	private void pressSelectForward(SelectBlockDialog dialog) {
+		JRadioButton forwardButton = (JRadioButton) findComponentByName(dialog, "forwardButton");
+		pressButton(forwardButton, true);
+	}
 
-		assertTrue(!action.isEnabledForContext(getContext()));
+	private void assertLengthFieldDisabled(SelectBlockDialog dialog) {
+		IntegerTextField inputField =
+			(IntegerTextField) getInstanceField("numberInputField", dialog);
+		assertFalse(inputField.getComponent().isEnabled());
+	}
+
+	private void assertLengthFieldEnabled(SelectBlockDialog dialog) {
+		IntegerTextField inputField =
+			(IntegerTextField) getInstanceField("numberInputField", dialog);
+		assertTrue(inputField.getComponent().isEnabled());
+	}
+
+	private void assertAddressFieldDisabled(SelectBlockDialog dialog) {
+		JTextField addressInputField = (JTextField) getInstanceField("toAddressField", dialog);
+		assertFalse(addressInputField.isEnabled());
+	}
+
+	private void assertAddressFieldEnabled(SelectBlockDialog dialog) {
+		JTextField addressInputField = (JTextField) getInstanceField("toAddressField", dialog);
+		assertTrue(addressInputField.isEnabled());
+	}
+
+	private void pressSelectAll(SelectBlockDialog dialog) {
+		JRadioButton allButton = (JRadioButton) findComponentByName(dialog, "allButton");
+		pressButton(allButton, true);
+	}
+
+	private void goTo(Address a) {
+		goTo(tool, program, a);
 	}
 
 	private void clearSelection() {
