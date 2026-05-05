@@ -364,6 +364,17 @@ public interface AddressSpace extends Comparable<AddressSpace> {
 			throws AddressOverflowException;
 
 	/**
+	 * Creates a new address by subtracting the displacement to the given address. The
+	 * new address will NOT wrap!  
+	 * @param addr the original address.
+	 * @param displacement  the displacement to subtract.
+	 * @return The new address created by subtracting the displacement to addr.offset.
+	 * @throws AddressOverflowException if the addition would cause a wrap,
+	 */
+	public Address subtractNoWrap(GenericAddress addr, BigInteger displacement)
+			throws AddressOverflowException;
+
+	/**
 	 * Creates a new address (possibly in a new space) by adding the given 
 	 * displacement from the given address.
 	 * @param addr original address being subtracted from
