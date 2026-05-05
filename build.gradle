@@ -66,7 +66,13 @@ allprojects {
 	tasks.withType(JavaForkOptions) {
 		jvmArgs '-Djava.awt.headless=true'
 	}
+
+	// enable generating lock files for gradle dependencies
+	dependencyLocking {
+		lockAllConfigurations()
+	}
 }
+
 
 /*********************************************************************************
  *  Use flat directory-style repository if flatRepo directory is present.
