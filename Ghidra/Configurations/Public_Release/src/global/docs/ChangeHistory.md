@@ -1,3 +1,17 @@
+# Ghidra 12.0.5 Change History (May 2026)
+
+### Improvements
+* _Multi-User_. Improved Ghidra Server serialization filters and added serialization filters to client-side Ghidra applications.  We may have missed something in our testing so let us know if you encounter an `InvalidClassException`.  The log will identify a class which fails to pass the filter rules. (GP-6719)
+* _Project_. Expanded on the set of allowed special characters for a local Ghidra project path name to include the following: `'.'`, `'-'`, `'='`, `'@'`, `' '`, `'_'`, `'('`, `')'`, `'['`, `']'`, and `'~'`. (GP-6681)
+* _Scripting_. Made some improvements to the RecoverClassesFromRTTIScript for GCC programs. (GP-6670)
+
+### Bugs
+* _Data Types_. Corrected upgrade failure which can occur for Project Data Type Archives. (GP-6649)
+* _Decompiler_. Updated the Decompiler to not re-decompile when creating a snapshot of the current function. (GP-6629)
+* _Function_. Corrected possible exception within Function Editor when applying simple parameter renames made within table. (GP-6746)
+* _GUI_. Corrected behavior of Function Call Tree when traversing thunk functions. (GP-6653)
+* _Multi-User_. Corrected potential security concern with Ghidra Server PKI Authentication.  If using PKI Authentication mode (`-a2`) for the server install, the user should upgrade the server.  See reported Ghidra GitHub Pull Request #9109 for more details. (GP-6678, Issue #9109)
+
 # Ghidra 12.0.4 Change History (March 2026)
 
 ### Improvements
