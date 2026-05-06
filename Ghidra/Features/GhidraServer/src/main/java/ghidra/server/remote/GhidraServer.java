@@ -243,15 +243,15 @@ public class GhidraServer extends UnicastRemoteObject implements GhidraServerHan
 	}
 
 	@Override
-	public void checkCompatibility(int minServerInterfaceVersion) throws RemoteException {
-		if (minServerInterfaceVersion > INTERFACE_VERSION) {
+	public void checkCompatibility(int clientInterfaceVersion) throws RemoteException {
+		if (clientInterfaceVersion > SERVER_INTERFACE_VERSION) {
 			throw new RemoteException(
 				"Incompatible server interface, a newer Ghidra Server version is required.");
 		}
-		else if (minServerInterfaceVersion < MINIMUM_INTERFACE_VERSION) {
+		else if (clientInterfaceVersion < SERVER_MIN_CLIENT_INTERFACE_VERSION) {
 			throw new RemoteException(
 				"Incompatible server interface, the minimum supported Ghidra version is " +
-					MIN_GHIDRA_VERSION);
+					ALT_GHIDRA_BIND_VERSION);
 		}
 	}
 
@@ -620,9 +620,18 @@ public class GhidraServer extends UnicastRemoteObject implements GhidraServerHan
 				}
 				try {
 					bindAddress = InetAddress.getByName(bindIp);
+					if (NetworkInterface.getByInetAddress(bindAddress) == null) {
+						System.err.println("Unknown -i interface bind address: " + bindIp);
+						System.exit(-1);
+					}
 				}
 				catch (UnknownHostException e) {
-					System.err.println("Unknown server interface bind address: " + bindIp);
+					System.err.println("Invalid -i interface bind address: " + bindIp);
+					System.exit(-1);
+				}
+				catch (SocketException e) {
+					System.err.println(
+						"Failed to resolve -i interface bind address: " + e.getMessage());
 					System.exit(-1);
 				}
 			}
@@ -871,9 +880,20 @@ public class GhidraServer extends UnicastRemoteObject implements GhidraServerHan
 
 			Registry registry = LocateRegistry.createRegistry(
 				ServerPortFactory.getRMIRegistryPort(), clientSocketFactory, serverSocketFactory);
+
+			StringBuilder bindVersions = new StringBuilder(" (");
+			bindVersions.append(GHIDRA_BIND_VERSION);
 			registry.bind(BIND_NAME, svr);
 
-			log.info("Registered Ghidra Server.");
+			if (!BIND_NAME.equals(ALT_BIND_NAME)) {
+				// Include alternate binding in support of older Ghidra client versions
+				bindVersions.append(", ");
+				bindVersions.append(ALT_GHIDRA_BIND_VERSION);
+				registry.bind(ALT_BIND_NAME, svr);
+			}
+			bindVersions.append(")");
+
+			log.info("Registered Ghidra Server" + bindVersions);
 
 		}
 		catch (Throwable t) {
