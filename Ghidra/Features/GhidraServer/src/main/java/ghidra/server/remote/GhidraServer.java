@@ -620,9 +620,18 @@ public class GhidraServer extends UnicastRemoteObject implements GhidraServerHan
 				}
 				try {
 					bindAddress = InetAddress.getByName(bindIp);
+					if (NetworkInterface.getByInetAddress(bindAddress) == null) {
+						System.err.println("Unknown -i interface bind address: " + bindIp);
+						System.exit(-1);
+					}
 				}
 				catch (UnknownHostException e) {
-					System.err.println("Unknown server interface bind address: " + bindIp);
+					System.err.println("Invalid -i interface bind address: " + bindIp);
+					System.exit(-1);
+				}
+				catch (SocketException e) {
+					System.err.println(
+						"Failed to resolve -i interface bind address: " + e.getMessage());
 					System.exit(-1);
 				}
 			}
