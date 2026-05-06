@@ -25,6 +25,10 @@ Ghidra 12.1 is fully backward compatible with project data from previous release
 and data type archives which are created or modified in 12.1 will not be usable by an earlier Ghidra
 version.
 
+**IMPORTANT:** Jython support is not supported by default but is included with the release as an extension.
+An extra step is required to install it.  If you have Ghidra Jython scripts, you must either install the
+Jython Extension, convert your scripts to Python and run with PyGhidra, or convert your scripts to JAVA.
+
 **IMPORTANT:** Ghidra 12.1 requires, at minimum, JDK 21 to run.
 
 **IMPORTANT:** To use the Debugger or do a full source distribution build, you will need Python3
@@ -68,8 +72,8 @@ recommended that older installation versions be updated to this latest release.
 RMI Serialization filters for the Ghidra Server have been tightened and similar filters have been
 added to Ghidra client applications which may communicate with a Ghidra Server.  Please report
 any unexpected *InvalidClassException* errors, which may occur, to the Ghidra team.  If this does occur,
-please check your Ghidra or server application log files for entries which indicate any filter
-rejections which would indicate the name of the offending class.
+please check your Ghidra Server or application log files for entries which indicate any filter
+rejections and the name of the offending class.
 
 ### Ghidra Server - PKI Authentication Vulnerability
 For those Ghidra Server deployments which utilize PKI Authentication mode (-a2), a logic bug 
@@ -131,6 +135,13 @@ other sources, such as PDB.  There is currently no simple way to try to match th
 encoded form; thus, using the encoded form can also create bifurcation in the namespace.
 
 ## Processors
+Added the Hexagon Processor module.  The instruction syntax is modified from the Hexagon manual to better
+fit Ghidra's mnemonic and operand Listing API.  This processor also introduces the first use of Ghidra's
+Sleigh **crossbuild** feature which is used for weaving pcode for parallel processor architectures such
+as the Hexagon.
+
+There have been a significant number of missing/extension instructions added to the ARM, AARCH64,
+and X86 processors.  Additionally since 12.0 there a myriad of processor specification bugs have been fixed.
 
 ## Jython Extension
 Jython support is now delivered as a Ghidra Extension, which means an extra step is required to 
