@@ -37,7 +37,7 @@ import ghidra.util.layout.PairLayout;
 /**
  * Dialog for making program selections
  */
-class SelectBlockDialog extends ReusableDialogComponentProvider {
+class SelectBytesDialog extends ReusableDialogComponentProvider {
 
 	private PluginTool tool;
 	private Navigatable navigatable;
@@ -49,7 +49,7 @@ class SelectBlockDialog extends ReusableDialogComponentProvider {
 	private JRadioButton allButton;
 	private JRadioButton toButton;
 
-	SelectBlockDialog(PluginTool tool, Navigatable navigatable) {
+	SelectBytesDialog(PluginTool tool, Navigatable navigatable) {
 		super("Select Bytes", false, true, true, false);
 		this.tool = tool;
 		this.navigatable = navigatable;
@@ -58,7 +58,7 @@ class SelectBlockDialog extends ReusableDialogComponentProvider {
 		addOKButton();
 		setOkButtonText("Select Bytes");
 		addDismissButton();
-		setHelpLocation(new HelpLocation("SelectBlockPlugin", "Select_Block_Help"));
+		setHelpLocation(new HelpLocation("SelectBytesPlugin", "Select_Bytes_Help"));
 
 		setItemsEnabled(false);
 		forwardButton.doClick();
@@ -72,14 +72,13 @@ class SelectBlockDialog extends ReusableDialogComponentProvider {
 		gbc.insets = new Insets(2, 2, 2, 2);
 		gbc.gridx = 0;
 		gbc.gridy = 0;
-		mainPanel.add(methodPanel(), gbc);
+		mainPanel.add(buildMethodPanel(), gbc);
 		gbc.gridx++;
-		mainPanel.add(buildBlockPanel(), gbc);
-		mainPanel.getAccessibleContext().setAccessibleName("Select Block");
+		mainPanel.add(buildInputPanel(), gbc);
 		return mainPanel;
 	}
 
-	private JPanel buildBlockPanel() {
+	private JPanel buildInputPanel() {
 		JPanel main = new JPanel();
 		main.setBorder(BorderFactory.createTitledBorder("Byte Selection"));
 
@@ -94,12 +93,10 @@ class SelectBlockDialog extends ReusableDialogComponentProvider {
 		lengthField = new IntegerTextField(10);
 		lengthField.getComponent().getAccessibleContext().setAccessibleName("Number Input");
 		lengthField.setMinValue(BigInteger.ZERO);
-		main.add(lengthField.getComponent());
-		main.getAccessibleContext().setAccessibleName("Block");
 		return main;
 	}
 
-	private JPanel methodPanel() {
+	private JPanel buildMethodPanel() {
 		ButtonGroup buttonGroup = new ButtonGroup();
 		JPanel main = new JPanel();
 		main.setBorder(BorderFactory.createTitledBorder("By Method"));
@@ -173,6 +170,10 @@ class SelectBlockDialog extends ReusableDialogComponentProvider {
 	void show(ComponentProvider provider) {
 		tool.showDialog(this, provider);
 		repack();
+	}
+
+	void setLength(int length) {
+		lengthField.setText(Integer.toString(length));
 	}
 
 	private void setItemsEnabled(boolean enabled) {

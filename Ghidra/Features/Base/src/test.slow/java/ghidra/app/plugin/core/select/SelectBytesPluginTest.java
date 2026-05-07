@@ -45,7 +45,7 @@ import ghidra.util.task.TaskMonitor;
 /**
  * Test class to test the Select Bytes dialog.
  */
-public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
+public class SelectBytesPluginTest extends AbstractGhidraHeadedIntegrationTest {
 
 	private static final String SELECT_BYTES_BUTTON_NAME = "Select Bytes";
 
@@ -64,9 +64,9 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		configureTool(tool);
 
 		browser = env.getPlugin(CodeBrowserPlugin.class);
-		SelectBlockPlugin plugin = env.getPlugin(SelectBlockPlugin.class);
+		SelectBytesPlugin plugin = env.getPlugin(SelectBytesPlugin.class);
 
-		showDialogAction = (DockingActionIf) getInstanceField("toolBarAction", plugin);
+		showDialogAction = getAction(plugin, "SelectBytes");
 	}
 
 	@After
@@ -97,7 +97,7 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		toolToConfigure.addPlugin(NextPrevAddressPlugin.class.getName());
 		toolToConfigure.addPlugin(CodeBrowserPlugin.class.getName());
 		toolToConfigure.addPlugin(GoToAddressLabelPlugin.class.getName());
-		toolToConfigure.addPlugin(SelectBlockPlugin.class.getName());
+		toolToConfigure.addPlugin(SelectBytesPlugin.class.getName());
 	}
 
 	@Test
@@ -107,7 +107,7 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		openProgram();
 		assertTrue(showDialogAction.isEnabledForContext(getContext()));
 
-		SelectBlockDialog dialog = showDialog();
+		SelectBytesDialog dialog = showDialog();
 
 		closeProgram();
 		assertTrue(!showDialogAction.isEnabledForContext(getContext()));
@@ -117,7 +117,7 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 	@Test
 	public void testSelectAll() throws Exception {
 		openProgram();
-		SelectBlockDialog dialog = showDialog();
+		SelectBytesDialog dialog = showDialog();
 
 		pressSelectAll(dialog);
 		pressSelectBytes(dialog);
@@ -132,7 +132,7 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		openProgram();
 		goTo(addr(0x1006420));
 
-		SelectBlockDialog dialog = showDialog();
+		SelectBytesDialog dialog = showDialog();
 
 		pressSelectAll(dialog);
 		assertAddressFieldDisabled(dialog);
@@ -157,7 +157,7 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		openProgram();
 		goTo(addr(0x1006420));
 
-		SelectBlockDialog dialog = showDialog();
+		SelectBytesDialog dialog = showDialog();
 
 		pressSelectForward(dialog);
 
@@ -173,7 +173,7 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		openProgram();
 		goTo(addr(0x1006420));
 
-		SelectBlockDialog dialog = showDialog();
+		SelectBytesDialog dialog = showDialog();
 
 		pressSelectBackward(dialog);
 
@@ -192,7 +192,7 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		openProgram();
 		goTo(addr(0x1006420));
 
-		SelectBlockDialog dialog = showDialog();
+		SelectBytesDialog dialog = showDialog();
 
 		pressSelectToAddress(dialog);
 
@@ -216,7 +216,7 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		Address overlayEnd = block.getEnd();
 		goTo(overlayStart);
 
-		SelectBlockDialog dialog = showDialog();
+		SelectBytesDialog dialog = showDialog();
 
 		pressSelectForward(dialog);
 
@@ -241,7 +241,7 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		Address overlayEnd = block.getEnd();
 		goTo(overlayStart);
 
-		SelectBlockDialog dialog = showDialog();
+		SelectBytesDialog dialog = showDialog();
 
 		pressSelectForward(dialog);
 
@@ -266,7 +266,7 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		Address overlayEnd = block.getEnd();
 		goTo(overlayEnd);
 
-		SelectBlockDialog dialog = showDialog();
+		SelectBytesDialog dialog = showDialog();
 
 		pressSelectBackward(dialog);
 
@@ -291,7 +291,7 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		Address overlayEnd = block.getEnd();
 		goTo(overlayEnd);
 
-		SelectBlockDialog dialog = showDialog();
+		SelectBytesDialog dialog = showDialog();
 
 		pressSelectBackward(dialog);
 
@@ -311,7 +311,7 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		Address startAddress = addr(0x6420);
 		goTo(startAddress);
 
-		SelectBlockDialog dialog = showDialog();
+		SelectBytesDialog dialog = showDialog();
 
 		pressSelectAll(dialog);
 
@@ -381,14 +381,14 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 // Private Methods
 //=================================================================================================	
 
-	private void pressSelectToAddress(SelectBlockDialog dialog) {
+	private void pressSelectToAddress(SelectBytesDialog dialog) {
 		JRadioButton toButton = (JRadioButton) findComponentByName(dialog, "toButton");
 		pressButton(toButton, true);
 	}
 
-	private SelectBlockDialog showDialog() {
+	private SelectBytesDialog showDialog() {
 		performAction(showDialogAction, getContext(), true);
-		SelectBlockDialog dialog = waitForDialogComponent(SelectBlockDialog.class);
+		SelectBytesDialog dialog = waitForDialogComponent(SelectBytesDialog.class);
 		return dialog;
 	}
 
@@ -420,51 +420,49 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		}
 	}
 
-	private void pressSelectBackward(SelectBlockDialog dialog) {
+	private void pressSelectBackward(SelectBytesDialog dialog) {
 		JRadioButton backwardButton = (JRadioButton) findComponentByName(dialog, "backwardButton");
 		pressButton(backwardButton, true);
 	}
 
-	private void setAddress(SelectBlockDialog dialog, String text) {
+	private void setAddress(SelectBytesDialog dialog, String text) {
 		final JTextField addressInputField =
 			(JTextField) getInstanceField("toAddressField", dialog);
 		runSwing(() -> addressInputField.setText(text));
 	}
 
-	private void setLength(SelectBlockDialog dialog, int length) {
-		IntegerTextField inputField =
-			(IntegerTextField) getInstanceField("numberInputField", dialog);
-		runSwing(() -> inputField.setValue(length));
+	private void setLength(SelectBytesDialog dialog, int length) {
+		runSwing(() -> dialog.setLength(length));
 	}
 
-	private void pressSelectForward(SelectBlockDialog dialog) {
+	private void pressSelectForward(SelectBytesDialog dialog) {
 		JRadioButton forwardButton = (JRadioButton) findComponentByName(dialog, "forwardButton");
 		pressButton(forwardButton, true);
 	}
 
-	private void assertLengthFieldDisabled(SelectBlockDialog dialog) {
+	private void assertLengthFieldDisabled(SelectBytesDialog dialog) {
 		IntegerTextField inputField =
-			(IntegerTextField) getInstanceField("numberInputField", dialog);
+			(IntegerTextField) getInstanceField("lengthField", dialog);
 		assertFalse(inputField.getComponent().isEnabled());
 	}
 
-	private void assertLengthFieldEnabled(SelectBlockDialog dialog) {
+	private void assertLengthFieldEnabled(SelectBytesDialog dialog) {
 		IntegerTextField inputField =
-			(IntegerTextField) getInstanceField("numberInputField", dialog);
+			(IntegerTextField) getInstanceField("lengthField", dialog);
 		assertTrue(inputField.getComponent().isEnabled());
 	}
 
-	private void assertAddressFieldDisabled(SelectBlockDialog dialog) {
+	private void assertAddressFieldDisabled(SelectBytesDialog dialog) {
 		JTextField addressInputField = (JTextField) getInstanceField("toAddressField", dialog);
 		assertFalse(addressInputField.isEnabled());
 	}
 
-	private void assertAddressFieldEnabled(SelectBlockDialog dialog) {
+	private void assertAddressFieldEnabled(SelectBytesDialog dialog) {
 		JTextField addressInputField = (JTextField) getInstanceField("toAddressField", dialog);
 		assertTrue(addressInputField.isEnabled());
 	}
 
-	private void pressSelectAll(SelectBlockDialog dialog) {
+	private void pressSelectAll(SelectBytesDialog dialog) {
 		JRadioButton allButton = (JRadioButton) findComponentByName(dialog, "allButton");
 		pressButton(allButton, true);
 	}
@@ -477,7 +475,7 @@ public class SelectBlockPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		runSwing(() -> browser.getProvider().setSelection(null));
 	}
 
-	private void pressSelectBytes(final SelectBlockDialog dialog) {
+	private void pressSelectBytes(final SelectBytesDialog dialog) {
 		executeOnSwingWithoutBlocking(
 			() -> pressButtonByText(dialog, SELECT_BYTES_BUTTON_NAME, true));
 
